@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Figure Ground: Scattered Alphabet</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #111;
+            font-family: Arial, sans-serif;
+        }
+
+        /* The canvas sits behind everything */
+        #noiseCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* Container for the scattered letters */
+        #scatter-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        /* Styles for individual letters */
+        .scattered-letter {
+            position: absolute;
+            font-family: 'Verdana', sans-serif;
+            font-weight: 900;
+            color: #FFFFFF;
+            user-select: none;
+            text-shadow: 0px 0px 4px rgba(0,0,0,0.7);
+            will-change: transform, left, top;
+            transition: top 0.5s ease, left 0.5s ease, transform 0.5s ease; /* Smooth shuffling */
+        }
+
+        /* --- UI ELEMENTS --- */
+
+        /* The Toggle Button (Always visible) */
+        #toggle-btn {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 10;
+            background: #fff;
+            color: #000;
+            border: none;
+            border-radius: 50px; /* Pill shape */
+            padding: 10px 20px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+            transition: transform 0.1s;
+        }
+        #toggle-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* The Control Window */
+        #controls {
+            position: absolute;
+            bottom: 70px; /* Positioned just above the toggle button */
+            left: 20px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 20px;
+            border-radius: 12px;
+            color: white;
+            border: 1px solid #444;
+            width: 250px;
+            user-select: none;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+            
+            /* Animation properties */
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            transform-origin: bottom left;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            pointer-events: auto;
+        }
+
+        /* Class to hide the controls */
+        #controls.hidden {
+            opacity: 0;
+            transform: translateY(20px) scale(0.9);
+            pointer-events: none;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+
+        input[type=range] {
+            width: 100%;
+            cursor: pointer;
+        }
+
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        button.action-btn {
+            background: #333;
+            color: #fff;
+            border: 1px solid #555;
+            padding: 10px;
+            cursor: pointer;
+            font-weight: bold;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        button.action-btn:hover {
+            background: #555;
+        }
+
+        /* Primary button highlight */
+        button.action-btn.primary {
+            background: #fff;
+            color: #000;
+            border: none;
+        }
+        button.action-btn.primary:hover {
+            background: #ddd;
+        }
+
+    </style>
+</head>
+<body>
+
+    <canvas id="noiseCanvas"></canvas>
+
+    <div id="scatter-container"></div>
+
+    <button id="toggle-btn" onclick="toggleControls()">⚙️ Settings</button>
+
+    <div id="controls">
+        <div class="control-group">
+            <label for="speed">Chaos Speed <span>(Fast)</span></label>
+            <input type="range" id="speed" min="1" max="60" value="45">
+        </div>
+        <div class="control-group">
+            <label for="density">Pattern Density <span>(High)</span></label>
+            <input type="range" id="density" min="50" max="1500" value="400">
+        </div>
+        
+        <div class="btn-group">
+            <button class="action-btn primary" onclick="scatterLetters()">Randomize Positions</button>
+            
+            <button class="action-btn" onclick="togglePattern()">Change Pattern</button>
+        </div>
+    </div>
+
+    <script>
+        // --- Setup Canvas & Sizing ---
+        const canvas = document.getElementById('noiseCanvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+            scatterLetters(); 
+        }
+        window.addEventListener('resize', resize);
+
+
+        // --- Configuration ---
+        const alphabetLower = "abcdefghijklmnopqrstuvwxyz";
+        const scatterContainer = document.getElementById('scatter-container');
+        const speedInput = document.getElementById('speed');
+        const densityInput = document.getElementById('density');
+        const controlsPanel = document.getElementById('controls');
+        
+        let patternType = 0; // 0 = Geometric, 1 = Static, 2 = Lines
+        let frameCount = 0;
+
+        // --- Toggle UI ---
+        function toggleControls() {
+            controlsPanel.classList.toggle('hidden');
+            const btn = document.getElementById('toggle-btn');
+            if (controlsPanel.classList.contains('hidden')) {
+                btn.innerText = "⚙️ Settings";
+            } else {
+                btn.innerText = "Close Menu";
+            }
+        }
+
+        // --- Letter Scattering Logic ---
+        function scatterLetters() {
+            // Check if letters already exist
+            let letters = Array.from(document.querySelectorAll('.scattered-letter'));
+
+            // If first run, create elements
+            if (letters.length === 0) {
+                const chars = alphabetLower.split('');
+                chars.forEach(char => {
+                    const el = document.createElement('div');
+                    el.classList.add('scattered-letter');
+                    el.innerText = char;
+                    scatterContainer.appendChild(el);
+                    letters.push(el);
+                });
+            }
+
+            // Assign new random properties to existing elements
+            letters.forEach(letterEl => {
+                // Min size 3vh, Max size 12vh
+                const minSize = Math.max(20, height * 0.03); 
+                const maxSize = Math.min(150, height * 0.12);
+                const fontSize = Math.random() * (maxSize - minSize) + minSize;
+                
+                letterEl.style.fontSize = `${fontSize}px`;
+
+                const paddingX = fontSize * 1.5; 
+                const paddingY = fontSize * 1.5;
+                const maxWidth = width - paddingX;
+                const maxHeight = height - paddingY;
+
+                const randomX = Math.max(0, Math.random() * maxWidth);
+                const randomY = Math.max(0, Math.random() * maxHeight);
+
+                letterEl.style.left = `${randomX}px`;
+                letterEl.style.top = `${randomY}px`;
+
+                const randomRot = (Math.random() * 90) - 45; 
+                letterEl.style.transform = `rotate(${randomRot}deg)`;
+            });
+        }
+
+        // --- Interaction ---
+        function togglePattern() {
+            patternType = (patternType + 1) % 3;
+        }
+
+        // Re-scatter on Spacebar
+        document.body.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                scatterLetters();
+            }
+        });
+
+        // --- Canvas Background Animation ---
+        function getRandomColor() {
+            const r = Math.floor(Math.random() * 256);
+            const g = Math.floor(Math.random() * 256);
+            const b = Math.floor(Math.random() * 256);
+            return `rgb(${r},${g},${b})`;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const speed = 61 - parseInt(speedInput.value);
+            frameCount++;
+            if (frameCount % speed !== 0) return;
+
+            const density = parseInt(densityInput.value);
+
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0,0,width,height);
+
+            if (patternType === 0) {
+                for (let i = 0; i < density; i++) {
+                    ctx.fillStyle = getRandomColor();
+                    const size = Math.random() * 120 + 10;
+                    const x = Math.random() * width;
+                    const y = Math.random() * height;
+                    
+                    if (Math.random() > 0.5) {
+                        ctx.fillRect(x - size/2, y - size/2, size, size);
+                    } else {
+                        ctx.beginPath();
+                        ctx.arc(x, y, size / 2, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            }
+            else if (patternType === 1) {
+                for (let i = 0; i < density * 3; i++) {
+                    ctx.fillStyle = getRandomColor();
+                    const w = Math.random() * 10 + 2;
+                    const h = Math.random() * 40 + 5;
+                    ctx.fillRect(Math.random() * width, Math.random() * height, w, h);
+                }
+            }
+            else if (patternType === 2) {
+                ctx.lineWidth = Math.random() * 8 + 2;
+                for (let i = 0; i < density / 1.5; i++) {
+                    ctx.strokeStyle = getRandomColor();
+                    ctx.beginPath();
+                    ctx.moveTo(Math.random() * width, Math.random() * height);
+                    ctx.lineTo(Math.random() * width, Math.random() * height);
+                    ctx.stroke();
+                }
+            }
+        }
+
+        // --- Initialization ---
+        resize();
+        animate();
+
+    </script>
+</body>
+</html>
