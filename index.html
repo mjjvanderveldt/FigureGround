@@ -4,6 +4,104 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Figure Ground: Scattered Alphabet</title>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, doc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Firebase Configuration ---
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        
+        // Initialize Firebase
+        let db, auth, user;
+        let leaderboardUnsubscribe = null;
+
+        if (firebaseConfig.apiKey) {
+            const app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+
+            const initAuth = async () => {
+                try {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (error) {
+                    console.error("Auth failed:", error);
+                }
+            };
+            
+            initAuth();
+
+            onAuthStateChanged(auth, (currentUser) => {
+                user = currentUser;
+                if (user) {
+                    setupLeaderboard();
+                }
+            });
+        }
+
+        // --- Leaderboard Logic ---
+        function setupLeaderboard() {
+            if (!user || !db) return;
+
+            const scoresRef = collection(db, 'artifacts', appId, 'users', user.uid, 'leaderboard');
+            
+            leaderboardUnsubscribe = onSnapshot(scoresRef, (snapshot) => {
+                const scores = [];
+                snapshot.forEach(doc => {
+                    scores.push({ id: doc.id, ...doc.data() });
+                });
+
+                // Sort in memory (Newest first)
+                scores.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+                renderLeaderboard(scores);
+            }, (error) => {
+                console.error("Error fetching leaderboard:", error);
+            });
+        }
+
+        function renderLeaderboard(scores) {
+            const list = document.getElementById('leaderboard-list');
+            list.innerHTML = '';
+
+            if (scores.length === 0) {
+                list.innerHTML = '<div class="empty-state">No times recorded yet.</div>';
+                return;
+            }
+
+            scores.forEach((score, index) => {
+                const item = document.createElement('div');
+                item.className = 'leaderboard-item';
+                
+                const dateObj = new Date(score.date);
+                const dateStr = dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+                item.innerHTML = `
+                    <span class="lb-time">${formatTime(score.duration)}</span>
+                    <span class="lb-date">${dateStr}</span>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        // Expose function to save time
+        window.saveTime = async (durationMs) => {
+            if (!user || !db) return;
+            try {
+                await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'leaderboard'), {
+                    date: new Date().toISOString(),
+                    duration: durationMs
+                });
+            } catch (e) {
+                console.error("Error saving time:", e);
+            }
+        };
+    </script>
     <style>
         body, html {
             margin: 0;
@@ -44,47 +142,99 @@
             user-select: none;
             text-shadow: 0px 0px 4px rgba(0,0,0,0.7);
             will-change: transform, left, top;
-            transition: top 0.5s ease, left 0.5s ease, transform 0.5s ease; /* Smooth shuffling */
+            transition: top 0.5s ease, left 0.5s ease, transform 0.5s ease;
         }
 
         /* --- UI ELEMENTS --- */
 
-        /* The Toggle Button (Always visible) */
-        #toggle-btn {
+        /* Top Timer Display */
+        #timer-display {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 20;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 3rem;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+            background: rgba(0,0,0,0.4);
+            padding: 5px 20px;
+            border-radius: 8px;
+            pointer-events: none;
+        }
+
+        /* Bottom Toolbar Area */
+        .toolbar {
             position: absolute;
             bottom: 20px;
             left: 20px;
+            right: 20px;
             z-index: 10;
-            background: #fff;
-            color: #000;
+            display: flex;
+            gap: 15px;
+            align-items: flex-end;
+            pointer-events: none; /* Let clicks pass through empty space */
+        }
+
+        .toolbar button {
+            pointer-events: auto;
             border: none;
-            border-radius: 50px; /* Pill shape */
-            padding: 10px 20px;
+            border-radius: 50px;
+            padding: 12px 24px;
             font-weight: bold;
+            font-size: 16px;
             cursor: pointer;
             box-shadow: 0 4px 6px rgba(0,0,0,0.5);
-            transition: transform 0.1s;
+            transition: transform 0.1s, background 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
-        #toggle-btn:active {
+        .toolbar button:active {
             transform: scale(0.95);
         }
 
-        /* The Control Window */
-        #controls {
+        /* Settings Toggle */
+        #toggle-btn {
+            background: #444;
+            color: #fff;
+        }
+        #toggle-btn:hover { background: #555; }
+
+        /* Timer Action Button */
+        #timer-btn {
+            background: #28a745; /* Green for start */
+            color: white;
+            min-width: 120px;
+            justify-content: center;
+        }
+        #timer-btn.running {
+            background: #dc3545; /* Red for stop */
+        }
+
+        /* Leaderboard Toggle */
+        #lb-toggle-btn {
+            background: #f0ad4e;
+            color: #000;
+        }
+        #lb-toggle-btn:hover { background: #ec971f; }
+
+
+        /* Panels (Settings & Leaderboard) */
+        .panel {
             position: absolute;
-            bottom: 70px; /* Positioned just above the toggle button */
-            left: 20px;
-            z-index: 10;
+            bottom: 80px;
+            z-index: 15;
             background: rgba(0, 0, 0, 0.9);
             padding: 20px;
             border-radius: 12px;
             color: white;
             border: 1px solid #444;
-            width: 250px;
-            user-select: none;
+            width: 280px;
             box-shadow: 0 10px 20px rgba(0,0,0,0.5);
             
-            /* Animation properties */
             opacity: 1;
             transform: translateY(0) scale(1);
             transform-origin: bottom left;
@@ -92,71 +242,76 @@
             pointer-events: auto;
         }
 
-        /* Class to hide the controls */
-        #controls.hidden {
+        .panel.hidden {
             opacity: 0;
             transform: translateY(20px) scale(0.9);
             pointer-events: none;
         }
 
-        .control-group {
-            margin-bottom: 15px;
-        }
+        #controls { left: 20px; }
         
-        label {
-            display: flex;
-            justify-content: space-between;
-            font-size: 14px;
-            margin-bottom: 5px;
-        }
-
-        input[type=range] {
-            width: 100%;
-            cursor: pointer;
-        }
-
-        .btn-group {
+        /* Leaderboard Panel Specifics */
+        #leaderboard-panel {
+            right: 20px; 
+            transform-origin: bottom right;
+            max-height: 60vh;
             display: flex;
             flex-direction: column;
-            gap: 8px;
         }
+        #leaderboard-panel h3 { margin: 0 0 15px 0; font-size: 18px; border-bottom: 1px solid #444; padding-bottom: 10px; }
+        
+        #leaderboard-list {
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+        
+        .leaderboard-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #333;
+            font-size: 14px;
+        }
+        .leaderboard-item:last-child { border-bottom: none; }
+        .lb-time { font-family: 'Courier New', monospace; font-weight: bold; color: #f0ad4e; font-size: 16px; }
+        .lb-date { color: #888; font-size: 12px; }
+        .empty-state { color: #666; font-style: italic; text-align: center; padding: 20px; }
 
+        /* Control Group Styles */
+        .control-group { margin-bottom: 15px; }
+        label { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px; }
+        input[type=range] { width: 100%; cursor: pointer; }
+        .btn-group { display: flex; flex-direction: column; gap: 8px; }
         button.action-btn {
-            background: #333;
-            color: #fff;
-            border: 1px solid #555;
-            padding: 10px;
-            cursor: pointer;
-            font-weight: bold;
-            border-radius: 4px;
-            transition: background 0.2s;
+            background: #333; color: #fff; border: 1px solid #555; padding: 10px;
+            cursor: pointer; font-weight: bold; border-radius: 4px; transition: background 0.2s;
         }
-
-        button.action-btn:hover {
-            background: #555;
-        }
-
-        /* Primary button highlight */
-        button.action-btn.primary {
-            background: #fff;
-            color: #000;
-            border: none;
-        }
-        button.action-btn.primary:hover {
-            background: #ddd;
-        }
+        button.action-btn:hover { background: #555; }
+        button.action-btn.primary { background: #fff; color: #000; border: none; }
+        button.action-btn.primary:hover { background: #ddd; }
 
     </style>
 </head>
 <body>
 
     <canvas id="noiseCanvas"></canvas>
-
     <div id="scatter-container"></div>
 
-    <button id="toggle-btn" onclick="toggleControls()">⚙️ Settings</button>
+    <div id="timer-display">00:00.00</div>
 
-    <div id="controls">
+    <!-- Toolbar -->
+    <div class="toolbar">
+        <button id="toggle-btn" onclick="togglePanel('controls')">⚙️ Settings</button>
+        
+        <div style="flex-grow: 1;"></div> <!-- Spacer -->
+
+        <button id="timer-btn" onclick="toggleTimer()">▶ Start</button>
+        <button id="lb-toggle-btn" onclick="togglePanel('leaderboard')">🏆 History</button>
+    </div>
+
+    <!-- Controls Panel -->
+    <div id="controls" class="panel hidden">
         <div class="control-group">
             <label for="speed">Chaos Speed <span>(Fast)</span></label>
             <input type="range" id="speed" min="1" max="60" value="45">
@@ -168,13 +323,86 @@
         
         <div class="btn-group">
             <button class="action-btn primary" onclick="scatterLetters()">Randomize Positions</button>
-            
             <button class="action-btn" onclick="togglePattern()">Change Pattern</button>
         </div>
     </div>
 
+    <!-- Leaderboard Panel -->
+    <div id="leaderboard-panel" class="panel hidden">
+        <h3>Personal Records</h3>
+        <div id="leaderboard-list">
+            <div class="empty-state">Loading history...</div>
+        </div>
+    </div>
+
     <script>
-        // --- Setup Canvas & Sizing ---
+        // --- Timer Logic ---
+        let startTime;
+        let timerInterval;
+        let isRunning = false;
+        let elapsed = 0;
+
+        const timerDisplay = document.getElementById('timer-display');
+        const timerBtn = document.getElementById('timer-btn');
+
+        function formatTime(ms) {
+            const minutes = Math.floor(ms / 60000);
+            const seconds = Math.floor((ms % 60000) / 1000);
+            const centis = Math.floor((ms % 1000) / 10);
+            return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${centis.toString().padStart(2, '0')}`;
+        }
+
+        function updateTimer() {
+            const now = Date.now();
+            elapsed = now - startTime;
+            timerDisplay.innerText = formatTime(elapsed);
+        }
+
+        function toggleTimer() {
+            if (isRunning) {
+                // Stop
+                clearInterval(timerInterval);
+                isRunning = false;
+                timerBtn.innerText = "▶ Start";
+                timerBtn.classList.remove('running');
+                
+                // Save time using the exposed window function (Firestore)
+                if (window.saveTime && elapsed > 100) { // Only save if > 0.1s to prevent accidental clicks
+                    window.saveTime(elapsed);
+                    // Open leaderboard automatically on stop to show result
+                    const lbPanel = document.getElementById('leaderboard-panel');
+                    if(lbPanel.classList.contains('hidden')) togglePanel('leaderboard');
+                }
+
+            } else {
+                // Start
+                startTime = Date.now();
+                elapsed = 0;
+                timerInterval = setInterval(updateTimer, 10);
+                isRunning = true;
+                timerBtn.innerText = "⏹ Stop";
+                timerBtn.classList.add('running');
+                
+                // Optional: Rescatter letters on start for a fresh game
+                // scatterLetters(); 
+            }
+        }
+
+        // --- UI Logic ---
+        function togglePanel(panelName) {
+            const controls = document.getElementById('controls');
+            const lb = document.getElementById('leaderboard-panel');
+            
+            if (panelName === 'controls') {
+                controls.classList.toggle('hidden');
+                if (!controls.classList.contains('hidden')) lb.classList.add('hidden');
+            } else if (panelName === 'leaderboard') {
+                lb.classList.toggle('hidden');
+                if (!lb.classList.contains('hidden')) controls.classList.add('hidden');
+            }
+        }
+
+        // --- Existing Game Logic ---
         const canvas = document.getElementById('noiseCanvas');
         const ctx = canvas.getContext('2d');
         let width, height;
@@ -188,34 +416,17 @@
         }
         window.addEventListener('resize', resize);
 
-
-        // --- Configuration ---
         const alphabetLower = "abcdefghijklmnopqrstuvwxyz";
         const scatterContainer = document.getElementById('scatter-container');
         const speedInput = document.getElementById('speed');
         const densityInput = document.getElementById('density');
-        const controlsPanel = document.getElementById('controls');
         
-        let patternType = 0; // 0 = Geometric, 1 = Static, 2 = Lines
+        let patternType = 0; 
         let frameCount = 0;
 
-        // --- Toggle UI ---
-        function toggleControls() {
-            controlsPanel.classList.toggle('hidden');
-            const btn = document.getElementById('toggle-btn');
-            if (controlsPanel.classList.contains('hidden')) {
-                btn.innerText = "⚙️ Settings";
-            } else {
-                btn.innerText = "Close Menu";
-            }
-        }
-
-        // --- Letter Scattering Logic ---
         function scatterLetters() {
-            // Check if letters already exist
             let letters = Array.from(document.querySelectorAll('.scattered-letter'));
 
-            // If first run, create elements
             if (letters.length === 0) {
                 const chars = alphabetLower.split('');
                 chars.forEach(char => {
@@ -227,44 +438,97 @@
                 });
             }
 
-            // Assign new random properties to existing elements
+            // Define UI exclusion zones
+            // Top: Timer is roughly 80px high including padding
+            // Bottom: Controls and buttons are roughly 140px
+            const uiTopMargin = 100; 
+            const uiBottomMargin = 140;
+            const safeHeight = height - uiTopMargin - uiBottomMargin;
+
+            // Store positions of placed letters to check for overlaps
+            const placedBoxes = [];
+
             letters.forEach(letterEl => {
-                // Min size 3vh, Max size 12vh
-                const minSize = Math.max(20, height * 0.03); 
-                const maxSize = Math.min(150, height * 0.12);
-                const fontSize = Math.random() * (maxSize - minSize) + minSize;
+                let bestX = 0, bestY = 0, bestSize = 0, bestRot = 0;
+                let foundSpot = false;
                 
-                letterEl.style.fontSize = `${fontSize}px`;
+                // Try up to 50 times to find a non-overlapping spot
+                // If we can't find one, we'll just use the last generated coordinates
+                for (let i = 0; i < 50; i++) {
+                    const minSize = Math.max(20, height * 0.03); 
+                    const maxSize = Math.min(150, height * 0.12);
+                    const fontSize = Math.random() * (maxSize - minSize) + minSize;
+                    
+                    // Rough bounding box estimation
+                    // Width is typically smaller than height for most letters, 
+                    // and we use 0.8 as a safe approximation for collision
+                    const boxW = fontSize * 0.8; 
+                    const boxH = fontSize * 0.8;
 
-                const paddingX = fontSize * 1.5; 
-                const paddingY = fontSize * 1.5;
-                const maxWidth = width - paddingX;
-                const maxHeight = height - paddingY;
+                    const maxWidth = width - boxW - 40; // 20px padding sides
 
-                const randomX = Math.max(0, Math.random() * maxWidth);
-                const randomY = Math.max(0, Math.random() * maxHeight);
+                    // Calculate Random Y within safe zone
+                    let randomY;
+                    if (safeHeight > maxSize) {
+                        // Normal case: plenty of room in the middle
+                        randomY = uiTopMargin + (Math.random() * (safeHeight - boxH));
+                    } else {
+                        // Fallback for very small screens: use full height but try to center
+                        randomY = Math.random() * (height - boxH);
+                    }
 
-                letterEl.style.left = `${randomX}px`;
-                letterEl.style.top = `${randomY}px`;
+                    const randomX = 20 + (Math.random() * maxWidth);
 
-                const randomRot = (Math.random() * 90) - 45; 
-                letterEl.style.transform = `rotate(${randomRot}deg)`;
+                    // Check collision with already placed boxes
+                    let overlap = false;
+                    for (const box of placedBoxes) {
+                        // Add a small padding (5px) to ensure they don't touch directly
+                        const padding = 5;
+                        if (
+                            randomX < box.x + box.w + padding &&
+                            randomX + boxW > box.x - padding &&
+                            randomY < box.y + box.h + padding &&
+                            randomY + boxH > box.y - padding
+                        ) {
+                            overlap = true;
+                            break;
+                        }
+                    }
+
+                    // Save the generated values for the fallback case
+                    bestX = randomX;
+                    bestY = randomY;
+                    bestSize = fontSize;
+                    bestRot = (Math.random() * 90) - 45;
+
+                    if (!overlap) {
+                        // Found a valid spot!
+                        placedBoxes.push({ x: bestX, y: bestY, w: boxW, h: boxH });
+                        foundSpot = true;
+                        break;
+                    }
+                }
+                
+                // If we ran out of attempts (foundSpot is false), we just place it 
+                // at the last generated coordinates (bestX, bestY) to avoid hiding the letter.
+
+                letterEl.style.fontSize = `${bestSize}px`;
+                letterEl.style.left = `${bestX}px`;
+                letterEl.style.top = `${bestY}px`;
+                letterEl.style.transform = `rotate(${bestRot}deg)`;
             });
         }
 
-        // --- Interaction ---
         function togglePattern() {
             patternType = (patternType + 1) % 3;
         }
 
-        // Re-scatter on Spacebar
         document.body.addEventListener('keydown', (e) => {
             if (e.code === 'Space') {
                 scatterLetters();
             }
         });
 
-        // --- Canvas Background Animation ---
         function getRandomColor() {
             const r = Math.floor(Math.random() * 256);
             const g = Math.floor(Math.random() * 256);
@@ -320,10 +584,8 @@
             }
         }
 
-        // --- Initialization ---
         resize();
         animate();
-
     </script>
 </body>
 </html>
