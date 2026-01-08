@@ -16,11 +16,8 @@
         // Initialize Firebase
         let db, auth, user;
         let leaderboardUnsubscribe = null;
-        // Queue times saved before auth/db are ready
         const unsavedTimes = [];
-        // Current leaderboard in-memory (used for optimistic updates)
         let currentLeaderboard = [];
-        // Local history cache key
         const LOCAL_HISTORY_KEY = `fg_history_${appId}`;
 
         function loadLocalHistory() {
@@ -40,7 +37,6 @@
             try {
                 const arr = loadLocalHistory();
                 arr.unshift(entry);
-                // keep most recent 200 entries
                 while (arr.length > 200) arr.pop();
                 localStorage.setItem(LOCAL_HISTORY_KEY, JSON.stringify(arr));
             } catch (e) {
@@ -81,11 +77,8 @@
             });
         }
 
-        // --- Leaderboard Logic ---
         function setupLeaderboard() {
             if (!user || !db) return;
-
-            // Use a query with server-side ordering and a reasonable limit
             const collRef = collection(db, 'artifacts', appId, 'users', user.uid, 'leaderboard');
             const q = query(collRef, orderBy('date', 'desc'), limit(50));
 
@@ -97,12 +90,10 @@
                     scores.push({ id: d.id, ...d.data() });
                 });
 
-                // If server has no records but we have local cached ones, show local until server has data
                 if (scores.length === 0) {
                     const local = loadLocalHistory();
                     if (local.length > 0) {
                         renderLeaderboard(local);
-                        // Attempt to flush local cache to server
                         (async () => {
                             const collRef = collection(db, 'artifacts', appId, 'users', user.uid, 'leaderboard');
                             for (const e of local.slice().reverse()) {
@@ -123,18 +114,14 @@
                 console.error("Error fetching leaderboard:", error);
             });
 
-            // If Firestore doesn't respond quickly, show local cache as fallback
             setTimeout(() => {
                 try {
-                    // If no snapshot has been received yet, load local history
                     if (!snapshotReceived) {
                         const local = loadLocalHistory();
                         const list = document.getElementById('leaderboard-list');
                         if (local.length > 0) {
                             renderLeaderboard(local);
-                            // Note: when snapshot arrives it will overwrite this view
                         } else {
-                            // show explicit empty state if there is no local cache
                             list.innerHTML = '<div class="empty-state">No times recorded yet.</div>';
                         }
                     }
@@ -143,7 +130,6 @@
                 }
             }, 2500);
 
-            // Flush any times saved before auth completed
             (async () => {
                 if (unsavedTimes.length === 0) return;
                 console.debug('Flushing', unsavedTimes.length, 'queued times');
@@ -153,7 +139,6 @@
                         await addDoc(collRef, { date: serverTimestamp(), duration: durationMs });
                     } catch (e) {
                         console.error('Error flushing queued time:', e);
-                        // push back and stop trying right now
                         unsavedTimes.unshift(durationMs);
                         break;
                     }
@@ -162,7 +147,6 @@
         }
 
         function renderLeaderboard(scores) {
-            // keep an in-memory copy for optimistic updates
             currentLeaderboard = Array.isArray(scores) ? scores.slice() : [];
             const list = document.getElementById('leaderboard-list');
             list.innerHTML = '';
@@ -176,7 +160,6 @@
                 const item = document.createElement('div');
                 item.className = 'leaderboard-item';
                 
-                // Handle Firestore Timestamp as well as ISO/date-string
                 const dateObj = score.date && typeof score.date.toDate === 'function' ? score.date.toDate() : new Date(score.date);
                 const dateStr = dateObj && !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—';
 
@@ -188,27 +171,28 @@
             });
         }
 
-        // Expose function to save time (queues if auth/db not ready) and cache locally
         window.saveTime = async (durationMs) => {
             const entry = { date: new Date().toISOString(), duration: durationMs };
-            // Always cache locally for immediate visibility and offline resilience
             try { saveLocalEntry(entry); } catch (e) { console.warn('local cache failed', e); }
 
+            // Always perform an optimistic local update so the leaderboard shows immediately
+            try {
+                currentLeaderboard.unshift({ id: `local-${Date.now()}`, ...entry });
+                if (currentLeaderboard.length > 200) currentLeaderboard.pop();
+                const lbPanel = document.getElementById('leaderboard-panel');
+                if (!lbPanel || !lbPanel.classList.contains('hidden')) {
+                    renderLeaderboard(currentLeaderboard);
+                }
+            } catch (e) { console.warn('optimistic update failed', e); }
+
+            // If auth/db not ready, queue the time for later flushing
             if (!user || !db) {
                 console.debug('saveTime: auth/db not ready, queuing duration', durationMs);
                 unsavedTimes.push(durationMs);
-                // Optimistically update UI from local cache
-                try {
-                    currentLeaderboard.unshift({ id: `local-${Date.now()}`, ...entry });
-                    if (currentLeaderboard.length > 200) currentLeaderboard.pop();
-                    const lbPanel = document.getElementById('leaderboard-panel');
-                    if (!lbPanel || !lbPanel.classList.contains('hidden')) {
-                        renderLeaderboard(currentLeaderboard);
-                    }
-                } catch (e) { console.warn('optimistic update failed', e); }
                 return;
             }
 
+            // Try persisting to server; on error, queue and keep optimistic UI
             try {
                 await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'leaderboard'), {
                     date: serverTimestamp(),
@@ -216,21 +200,10 @@
                 });
             } catch (e) {
                 console.error("Error saving time:", e);
-                // queue for retry
                 unsavedTimes.push(durationMs);
-                // Also optimistically update UI on failure
-                try {
-                    currentLeaderboard.unshift({ id: `local-${Date.now()}`, ...entry });
-                    if (currentLeaderboard.length > 200) currentLeaderboard.pop();
-                    const lbPanel = document.getElementById('leaderboard-panel');
-                    if (!lbPanel || !lbPanel.classList.contains('hidden')) {
-                        renderLeaderboard(currentLeaderboard);
-                    }
-                } catch (err) { console.warn('optimistic update after failure failed', err); }
             }
         };
 
-        // If Firebase is not configured, show local history immediately once DOM is ready
         document.addEventListener('DOMContentLoaded', () => {
             if (!firebaseConfig.apiKey) {
                 try {
@@ -245,25 +218,20 @@
                     console.warn('local history render failed', e);
                 }
             }
-            // Attach clear history handler
             try {
                 const btn = document.getElementById('clear-history-btn');
                 if (btn) btn.addEventListener('click', clearHistory);
             } catch (e) { /* ignore */ }
         });
 
-        // Clear history (local + server). Asks for confirmation first.
         async function clearHistory() {
             if (!confirm('Clear all personal records? This cannot be undone.')) return;
-
-            // Clear local cache and optimistic UI first
             try {
                 clearLocalHistory();
             } catch (e) { console.warn('clearLocalHistory failed', e); }
             currentLeaderboard = [];
             renderLeaderboard([]);
 
-            // If Firestore available, try to delete server-side docs
             if (!db || !user) return;
             try {
                 const collRef = collection(db, 'artifacts', appId, 'users', user.uid, 'leaderboard');
@@ -292,7 +260,6 @@
             font-family: Arial, sans-serif;
         }
 
-        /* The canvas sits behind everything */
         #noiseCanvas {
             position: absolute;
             top: 0;
@@ -300,7 +267,6 @@
             z-index: 1;
         }
 
-        /* Container for the scattered letters */
         #scatter-container {
             position: absolute;
             top: 0;
@@ -312,7 +278,6 @@
             overflow: hidden;
         }
 
-        /* Styles for individual letters */
         .scattered-letter {
             position: absolute;
             font-family: 'Verdana', sans-serif;
@@ -320,13 +285,17 @@
             color: #FFFFFF;
             user-select: none;
             text-shadow: 0px 0px 4px rgba(0,0,0,0.7);
-            will-change: transform, left, top;
-            transition: top 0.5s ease, left 0.5s ease, transform 0.5s ease;
+            /* Removed transitions so the 'teleport' feels instant */
+            /* transition: top 0.5s ease, left 0.5s ease, transform 0.5s ease; */
+            pointer-events: auto; /* Enable clicks on letters */
+            cursor: pointer;
         }
+        
+        /* Highlight the next expected letter visually? Optional, not requested but helpful.
+           Uncomment if desired.
+        */
+        /* .scattered-letter:hover { color: #f0ad4e; } */
 
-        /* --- UI ELEMENTS --- */
-
-        /* Top Timer Display */
         #timer-display {
             position: absolute;
             top: 20px;
@@ -344,7 +313,6 @@
             pointer-events: none;
         }
 
-        /* Bottom Toolbar Area */
         .toolbar {
             position: absolute;
             bottom: 20px;
@@ -354,7 +322,7 @@
             display: flex;
             gap: 15px;
             align-items: flex-end;
-            pointer-events: none; /* Let clicks pass through empty space */
+            pointer-events: none;
         }
 
         .toolbar button {
@@ -375,33 +343,20 @@
             transform: scale(0.95);
         }
 
-        /* Settings Toggle */
-        #toggle-btn {
-            background: #444;
-            color: #fff;
-        }
+        #toggle-btn { background: #444; color: #fff; }
         #toggle-btn:hover { background: #555; }
 
-        /* Timer Action Button */
         #timer-btn {
-            background: #28a745; /* Green for start */
+            background: #28a745;
             color: white;
             min-width: 120px;
             justify-content: center;
         }
-        #timer-btn.running {
-            background: #dc3545; /* Red for stop */
-        }
+        #timer-btn.running { background: #dc3545; }
 
-        /* Leaderboard Toggle */
-        #lb-toggle-btn {
-            background: #f0ad4e;
-            color: #000;
-        }
+        #lb-toggle-btn { background: #f0ad4e; color: #000; }
         #lb-toggle-btn:hover { background: #ec971f; }
 
-
-        /* Panels (Settings & Leaderboard) */
         .panel {
             position: absolute;
             bottom: 80px;
@@ -413,7 +368,6 @@
             border: 1px solid #444;
             width: 280px;
             box-shadow: 0 10px 20px rgba(0,0,0,0.5);
-            
             opacity: 1;
             transform: translateY(0) scale(1);
             transform-origin: bottom left;
@@ -429,7 +383,6 @@
 
         #controls { left: 20px; }
         
-        /* Leaderboard Panel Specifics */
         #leaderboard-panel {
             right: 20px; 
             transform-origin: bottom right;
@@ -457,11 +410,9 @@
         .lb-date { color: #888; font-size: 12px; }
         .empty-state { color: #666; font-style: italic; text-align: center; padding: 20px; }
 
-        /* Danger variant for destructive buttons */
         button.action-btn.danger { background: #c9302c; color: #fff; border: none; }
         button.action-btn.danger:hover { background: #a52822; }
 
-        /* Control Group Styles */
         .control-group { margin-bottom: 15px; }
         label { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px; }
         input[type=range] { width: 100%; cursor: pointer; }
@@ -473,7 +424,6 @@
         button.action-btn:hover { background: #555; }
         button.action-btn.primary { background: #fff; color: #000; border: none; }
         button.action-btn.primary:hover { background: #ddd; }
-
     </style>
 </head>
 <body>
@@ -483,17 +433,13 @@
 
     <div id="timer-display">00:00.00</div>
 
-    <!-- Toolbar -->
     <div class="toolbar">
         <button id="toggle-btn" onclick="togglePanel('controls')">⚙️ Settings</button>
-        
-        <div style="flex-grow: 1;"></div> <!-- Spacer -->
-
+        <div style="flex-grow: 1;"></div> 
         <button id="timer-btn" onclick="toggleTimer()">▶ Start</button>
         <button id="lb-toggle-btn" onclick="togglePanel('leaderboard')">🏆 History</button>
     </div>
 
-    <!-- Controls Panel -->
     <div id="controls" class="panel hidden">
         <div class="control-group">
             <label for="speed">Chaos Speed <span>(Fast)</span></label>
@@ -510,7 +456,6 @@
         </div>
     </div>
 
-    <!-- Leaderboard Panel -->
     <div id="leaderboard-panel" class="panel hidden">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
             <h3>Personal Records</h3>
@@ -522,6 +467,39 @@
     </div>
 
     <script>
+        // --- Audio Logic ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playTone(index) {
+            // Ensure context is running (browsers block auto-audio)
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+
+            // Base frequency (C4 approx 261.63Hz)
+            const baseFreq = 261.63;
+            // Chromatic scale calculation: f = f0 * 2^(n/12)
+            const freq = baseFreq * Math.pow(2, index / 12);
+
+            oscillator.type = 'sine';
+            oscillator.frequency.value = freq;
+
+            // Attack and Release
+            gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+            gainNode.gain.linearRampToValueAtTime(0.1, audioCtx.currentTime + 0.05);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.3);
+        }
+
+        // --- Game Logic Globals ---
+        let nextCharIndex = 0; // 0 = 'a', 25 = 'z'
+
         // --- Timer Logic ---
         let startTime;
         let timerInterval;
@@ -552,10 +530,8 @@
                 timerBtn.innerText = "▶ Start";
                 timerBtn.classList.remove('running');
                 
-                // Save time using the exposed window function (Firestore)
-                if (window.saveTime && elapsed > 100) { // Only save if > 0.1s to prevent accidental clicks
+                if (window.saveTime && elapsed > 100) { 
                     window.saveTime(elapsed);
-                    // Open leaderboard automatically on stop to show result
                     const lbPanel = document.getElementById('leaderboard-panel');
                     if(lbPanel.classList.contains('hidden')) togglePanel('leaderboard');
                 }
@@ -569,8 +545,9 @@
                 timerBtn.innerText = "⏹ Stop";
                 timerBtn.classList.add('running');
                 
-                // Optional: Rescatter letters on start for a fresh game
-                // scatterLetters(); 
+                // Reset game logic on start
+                nextCharIndex = 0;
+                scatterLetters();
             }
         }
 
@@ -588,10 +565,22 @@
             }
         }
 
-        // --- Existing Game Logic ---
+        // --- Canvas & Scatter Logic ---
         const canvas = document.getElementById('noiseCanvas');
         const ctx = canvas.getContext('2d');
         let width, height;
+
+        const alphabetLower = "abcdefghijklmnopqrstuvwxyz";
+        const scatterContainer = document.getElementById('scatter-container');
+        const speedInput = document.getElementById('speed');
+        const densityInput = document.getElementById('density');
+        
+        let patternType = 0; 
+        let frameCount = 0;
+
+        // UI Zones for exclusion
+        const uiTopMargin = 100; 
+        const uiBottomMargin = 140;
 
         function resize() {
             width = window.innerWidth;
@@ -602,106 +591,123 @@
         }
         window.addEventListener('resize', resize);
 
-        const alphabetLower = "abcdefghijklmnopqrstuvwxyz";
-        const scatterContainer = document.getElementById('scatter-container');
-        const speedInput = document.getElementById('speed');
-        const densityInput = document.getElementById('density');
-        
-        let patternType = 0; 
-        let frameCount = 0;
+        // Helper to check collision with existing DOM elements or explicit boxes
+        function checkCollision(x, y, w, h, ignoreElement = null) {
+            // Get all current letters
+            const letters = document.querySelectorAll('.scattered-letter');
+            
+            for (const other of letters) {
+                if (other === ignoreElement) continue;
 
-        function scatterLetters() {
-            let letters = Array.from(document.querySelectorAll('.scattered-letter'));
+                // Get computed style positions
+                const rect = other.getBoundingClientRect();
+                const padding = 5;
 
-            if (letters.length === 0) {
-                const chars = alphabetLower.split('');
-                chars.forEach(char => {
-                    const el = document.createElement('div');
-                    el.classList.add('scattered-letter');
-                    el.innerText = char;
-                    scatterContainer.appendChild(el);
-                    letters.push(el);
-                });
+                // Note: rect.x includes window scroll, but body is overflow hidden
+                if (
+                    x < rect.left + rect.width + padding &&
+                    x + w > rect.left - padding &&
+                    y < rect.top + rect.height + padding &&
+                    y + h > rect.top - padding
+                ) {
+                    return true;
+                }
             }
+            return false;
+        }
 
-            // Define UI exclusion zones
-            // Top: Timer is roughly 80px high including padding
-            // Bottom: Controls and buttons are roughly 140px
-            const uiTopMargin = 100; 
-            const uiBottomMargin = 140;
+        function respawnLetter(letterEl) {
+            // Temporarily hide to visually "disappear"
+            letterEl.style.opacity = '0';
+            letterEl.style.pointerEvents = 'none';
+
+            // Find new spot
+            let foundSpot = false;
+            let bestX = 0, bestY = 0, bestSize = 0, bestRot = 0;
+
             const safeHeight = height - uiTopMargin - uiBottomMargin;
 
-            // Store positions of placed letters to check for overlaps
-            const placedBoxes = [];
-
-            letters.forEach(letterEl => {
-                let bestX = 0, bestY = 0, bestSize = 0, bestRot = 0;
-                let foundSpot = false;
+            for (let i = 0; i < 50; i++) {
+                const minSize = Math.max(20, height * 0.03); 
+                const maxSize = Math.min(150, height * 0.12);
+                const fontSize = Math.random() * (maxSize - minSize) + minSize;
                 
-                // Try up to 50 times to find a non-overlapping spot
-                // If we can't find one, we'll just use the last generated coordinates
-                for (let i = 0; i < 50; i++) {
-                    const minSize = Math.max(20, height * 0.03); 
-                    const maxSize = Math.min(150, height * 0.12);
-                    const fontSize = Math.random() * (maxSize - minSize) + minSize;
-                    
-                    // Rough bounding box estimation
-                    // Width is typically smaller than height for most letters, 
-                    // and we use 0.8 as a safe approximation for collision
-                    const boxW = fontSize * 0.8; 
-                    const boxH = fontSize * 0.8;
+                const boxW = fontSize * 0.8; 
+                const boxH = fontSize * 0.8;
+                const maxWidth = width - boxW - 40; 
 
-                    const maxWidth = width - boxW - 40; // 20px padding sides
+                let randomY;
+                if (safeHeight > maxSize) {
+                    randomY = uiTopMargin + (Math.random() * (safeHeight - boxH));
+                } else {
+                    randomY = Math.random() * (height - boxH);
+                }
+                const randomX = 20 + (Math.random() * maxWidth);
 
-                    // Calculate Random Y within safe zone
-                    let randomY;
-                    if (safeHeight > maxSize) {
-                        // Normal case: plenty of room in the middle
-                        randomY = uiTopMargin + (Math.random() * (safeHeight - boxH));
-                    } else {
-                        // Fallback for very small screens: use full height but try to center
-                        randomY = Math.random() * (height - boxH);
-                    }
-
-                    const randomX = 20 + (Math.random() * maxWidth);
-
-                    // Check collision with already placed boxes
-                    let overlap = false;
-                    for (const box of placedBoxes) {
-                        // Add a small padding (5px) to ensure they don't touch directly
-                        const padding = 5;
-                        if (
-                            randomX < box.x + box.w + padding &&
-                            randomX + boxW > box.x - padding &&
-                            randomY < box.y + box.h + padding &&
-                            randomY + boxH > box.y - padding
-                        ) {
-                            overlap = true;
-                            break;
-                        }
-                    }
-
-                    // Save the generated values for the fallback case
+                if (!checkCollision(randomX, randomY, boxW, boxH, letterEl)) {
                     bestX = randomX;
                     bestY = randomY;
                     bestSize = fontSize;
                     bestRot = (Math.random() * 90) - 45;
-
-                    if (!overlap) {
-                        // Found a valid spot!
-                        placedBoxes.push({ x: bestX, y: bestY, w: boxW, h: boxH });
-                        foundSpot = true;
-                        break;
-                    }
+                    foundSpot = true;
+                    break;
                 }
-                
-                // If we ran out of attempts (foundSpot is false), we just place it 
-                // at the last generated coordinates (bestX, bestY) to avoid hiding the letter.
+            }
 
-                letterEl.style.fontSize = `${bestSize}px`;
-                letterEl.style.left = `${bestX}px`;
-                letterEl.style.top = `${bestY}px`;
-                letterEl.style.transform = `rotate(${bestRot}deg)`;
+            // Apply new styles
+            letterEl.style.fontSize = `${bestSize}px`;
+            letterEl.style.left = `${bestX}px`;
+            letterEl.style.top = `${bestY}px`;
+            letterEl.style.transform = `rotate(${bestRot}deg)`;
+
+            // Make it reappear
+            setTimeout(() => {
+                letterEl.style.opacity = '1';
+                letterEl.style.pointerEvents = 'auto';
+            }, 50); // Short delay to register the visual break
+        }
+
+        function handleLetterClick(e) {
+            const letterEl = e.target;
+            const clickedChar = letterEl.innerText;
+            const targetChar = alphabetLower[nextCharIndex];
+
+            if (clickedChar === targetChar) {
+                // Correct click
+                playTone(nextCharIndex);
+                
+                respawnLetter(letterEl);
+
+                nextCharIndex++;
+                if (nextCharIndex >= alphabetLower.length) {
+                    nextCharIndex = 0; // Reset after z
+                }
+            }
+        }
+
+        function scatterLetters() {
+            // Reset index if we are re-scattering completely
+            nextCharIndex = 0;
+            
+            scatterContainer.innerHTML = ''; // Clear existing
+            const chars = alphabetLower.split('');
+            
+            // Create elements first
+            const letters = chars.map(char => {
+                const el = document.createElement('div');
+                el.classList.add('scattered-letter');
+                el.innerText = char;
+                el.addEventListener('mousedown', handleLetterClick); // Add click handler
+                el.addEventListener('touchstart', handleLetterClick); // Add touch handler
+                scatterContainer.appendChild(el);
+                return el;
+            });
+
+            // Position them
+            letters.forEach(letterEl => {
+                // Just use the respawn logic for initial placement too, 
+                // as it now checks collisions against the DOM
+                respawnLetter(letterEl);
             });
         }
 
