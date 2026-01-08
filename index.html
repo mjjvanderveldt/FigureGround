@@ -704,8 +704,16 @@
 
             if (clickedChar === targetChar) {
                 // Correct click
-                playTone(nextCharIndex);
-                
+                const toneIndex = nextCharIndex;
+                // If this is the final letter 'z', chime rapidly 5 times
+                if (toneIndex === alphabetLower.length - 1) {
+                    for (let i = 0; i < 5; i++) {
+                        setTimeout(() => playTone(toneIndex), i * 120);
+                    }
+                } else {
+                    playTone(toneIndex);
+                }
+
                 respawnLetter(letterEl);
 
                 nextCharIndex++;
