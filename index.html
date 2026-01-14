@@ -524,7 +524,12 @@
 
     <div class="toolbar">
         <button id="toggle-btn" onclick="togglePanel('controls')">⚙️ Settings</button>
-        <div style="flex-grow: 1;"></div> 
+        <!-- NEW: Replaced the spacer with a centered display div. CHANGED: display:block by default. -->
+        <div style="flex-grow: 1; display: flex; justify-content: center; align-items: center; pointer-events: none;">
+            <div id="target-display" style="color: #fff; font-size: 1.2rem; font-weight: bold; text-shadow: 0 2px 2px rgba(0,0,0,0.8); display: block; font-family: sans-serif;">
+                FIND: <span id="target-char" style="font-size: 2rem; color: #f0ad4e; margin-left: 8px;">a</span>
+            </div>
+        </div> 
         <button id="timer-btn" onclick="toggleTimer()">▶ Start</button>
         <button id="lb-toggle-btn" onclick="togglePanel('leaderboard')">🏆 History</button>
     </div>
@@ -545,6 +550,22 @@
         <div class="control-group">
             <label for="density">Pattern Density <span>(High)</span></label>
             <input type="range" id="density" min="50" max="1500" value="400">
+        </div>
+
+        <!-- NEW: Wandering Letters Checkbox -->
+        <div class="control-group">
+            <label for="wander-check" style="cursor: pointer; align-items: center;">
+                Wandering Letters
+                <input type="checkbox" id="wander-check" onchange="toggleWander(this.checked)" style="width: 20px; height: 20px; margin: 0; cursor: pointer;">
+            </label>
+        </div>
+
+        <!-- NEW: Random Colors Checkbox -->
+        <div class="control-group">
+            <label for="color-check" style="cursor: pointer; align-items: center;">
+                Randomize Colors
+                <input type="checkbox" id="color-check" onchange="toggleRandomColors(this.checked)" style="width: 20px; height: 20px; margin: 0; cursor: pointer;">
+            </label>
         </div>
         
         <div class="btn-group" id="alpha-controls">
@@ -610,6 +631,24 @@
         window.gameMode = 'alphabet'; // 'alphabet' or 'ball'
         window.patternType = 0; // 0, 1, 2
         let nextCharIndex = 0; // 0 = 'a', 25 = 'z'
+        let wanderingLetters = false; 
+        let randomColors = false; // NEW state
+
+        window.toggleWander = (checked) => {
+            wanderingLetters = checked;
+        };
+
+        function getRandomBrightColor() {
+             return `hsl(${Math.floor(Math.random() * 360)}, 100%, 70%)`;
+        }
+
+        window.toggleRandomColors = (checked) => {
+            randomColors = checked;
+            const letters = document.querySelectorAll('.scattered-letter');
+            letters.forEach(el => {
+                el.style.color = randomColors ? getRandomBrightColor() : '#FFFFFF';
+            });
+        };
         
         // Ball Globals
         let ballX = 100, ballY = 100;
@@ -672,7 +711,7 @@
                 // Reset game logic on start
                 if (window.gameMode === 'alphabet') {
                     nextCharIndex = 0;
-                    scatterLetters();
+                    scatterLetters(); // This will also update the target display
                 } else {
                     // Ball mode reset
                     ballClickCount = 0;
@@ -707,6 +746,10 @@
             // Toggle Controls
             document.getElementById('alpha-controls').classList.toggle('hidden', mode !== 'alphabet');
             document.getElementById('ball-controls').classList.toggle('hidden', mode !== 'ball');
+
+            // Toggle Target Display (NEW)
+            const targetDisp = document.getElementById('target-display');
+            if(targetDisp) targetDisp.style.display = (mode === 'alphabet') ? 'block' : 'none';
 
             // Toggle Elements
             const scatter = document.getElementById('scatter-container');
@@ -750,6 +793,12 @@
         // UI Zones for exclusion
         const uiTopMargin = 100; 
         const uiBottomMargin = 140;
+
+        // NEW Helper to update the target letter text
+        function updateTargetDisplay() {
+            const el = document.getElementById('target-char');
+            if(el) el.innerText = alphabetLower[nextCharIndex];
+        }
 
         function resize() {
             width = window.innerWidth;
@@ -826,6 +875,13 @@
                 }
             }
 
+            // Init simulation props (NEW)
+            letterEl.x = bestX;
+            letterEl.y = bestY;
+            const speed = 0.8; // Wander speed
+            letterEl.vx = (Math.random() - 0.5) * speed;
+            letterEl.vy = (Math.random() - 0.5) * speed;
+
             // Apply new styles
             letterEl.style.fontSize = `${bestSize}px`;
             letterEl.style.left = `${bestX}px`;
@@ -868,6 +924,7 @@
                 if (nextCharIndex >= alphabetLower.length) {
                     nextCharIndex = 0; // Reset after z
                 }
+                updateTargetDisplay(); // Update the visual indicator
             }
         }
 
@@ -876,6 +933,7 @@
             
             // Reset index if we are re-scattering completely
             nextCharIndex = 0;
+            updateTargetDisplay(); // Ensure display resets to 'a'
             
             scatterContainer.innerHTML = ''; // Clear existing
             const chars = alphabetLower.split('');
@@ -885,6 +943,9 @@
                 const el = document.createElement('div');
                 el.classList.add('scattered-letter');
                 el.innerText = char;
+                // NEW: Set color based on state
+                el.style.color = randomColors ? getRandomBrightColor() : '#FFFFFF';
+                
                 el.addEventListener('mousedown', handleLetterClick); // Add click handler
                 el.addEventListener('touchstart', handleLetterClick); // Add touch handler
                 scatterContainer.appendChild(el);
@@ -1108,6 +1169,76 @@
 
         function animate() {
             requestAnimationFrame(animate);
+
+            // --- Letter Wandering Update (NEW) ---
+            if (window.gameMode === 'alphabet' && wanderingLetters) {
+                const letters = document.querySelectorAll('.scattered-letter');
+                // UI Elements to collide with (Timer & Toolbar buttons)
+                const uiElements = [
+                    document.getElementById('timer-display'),
+                    ...document.querySelectorAll('.toolbar button')
+                ];
+                
+                letters.forEach(el => {
+                    // Skip if currently respawning (hidden)
+                    if (el.style.opacity === '0') return;
+
+                    // Lazy Init logic for existing letters
+                    if (typeof el.x === 'undefined') {
+                        el.x = parseFloat(el.style.left || 0);
+                        el.y = parseFloat(el.style.top || 0);
+                        el.vx = (Math.random() - 0.5) * 0.8; 
+                        el.vy = (Math.random() - 0.5) * 0.8;
+                    }
+                    
+                    const prevX = el.x;
+                    const prevY = el.y;
+
+                    el.x += el.vx;
+                    el.y += el.vy;
+                    
+                    const w = el.offsetWidth;
+                    const h = el.offsetHeight;
+
+                    // Screen Edge Bounce
+                    if (el.x <= 0) { el.x = 0; el.vx *= -1; }
+                    if (el.x >= width - w) { el.x = width - w; el.vx *= -1; }
+                    if (el.y <= 0) { el.y = 0; el.vy *= -1; }
+                    if (el.y >= height - h) { el.y = height - h; el.vy *= -1; }
+
+                    // UI Collision Logic (Simplified AABB)
+                    for (const uiEl of uiElements) {
+                        if (!uiEl) continue;
+                        const rect = uiEl.getBoundingClientRect(); // Optimization: could cache these outside loop
+                        
+                        if (el.x < rect.right &&
+                            el.x + w > rect.left &&
+                            el.y < rect.bottom &&
+                            el.y + h > rect.top) {
+                            
+                            // Determine bounce direction
+                            const wasLeft = prevX + w <= rect.left;
+                            const wasRight = prevX >= rect.right;
+                            const wasAbove = prevY + h <= rect.top;
+                            const wasBelow = prevY >= rect.bottom;
+                            
+                            if (wasLeft || wasRight) {
+                                el.vx *= -1;
+                                if (wasLeft) el.x = rect.left - w - 1;
+                                else el.x = rect.right + 1;
+                            }
+                            if (wasAbove || wasBelow) {
+                                el.vy *= -1;
+                                if (wasAbove) el.y = rect.top - h - 1;
+                                else el.y = rect.bottom + 1;
+                            }
+                        }
+                    }
+
+                    el.style.left = `${el.x}px`;
+                    el.style.top = `${el.y}px`;
+                });
+            }
 
             // --- Ball Update (Runs every frame for smoothness) ---
             if (window.gameMode === 'ball' && !ballEl.classList.contains('hidden')) {
