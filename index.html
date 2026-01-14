@@ -567,6 +567,14 @@
                 <input type="checkbox" id="color-check" onchange="toggleRandomColors(this.checked)" style="width: 20px; height: 20px; margin: 0; cursor: pointer;">
             </label>
         </div>
+
+        <!-- NEW: Use Numbers Checkbox -->
+        <div class="control-group">
+            <label for="numbers-check" style="cursor: pointer; align-items: center;">
+                Use Numbers (1-26)
+                <input type="checkbox" id="numbers-check" onchange="toggleUseNumbers(this.checked)" style="width: 20px; height: 20px; margin: 0; cursor: pointer;">
+            </label>
+        </div>
         
         <div class="btn-group" id="alpha-controls">
             <button class="action-btn primary" onclick="scatterLetters()">Randomize Positions</button>
@@ -650,6 +658,17 @@
             });
         };
         
+        const alphabetLower = "abcdefghijklmnopqrstuvwxyz";
+        const numbersList = Array.from({length: 26}, (_, i) => (i + 1).toString());
+        let useNumbers = false; 
+
+        window.toggleUseNumbers = (checked) => {
+            useNumbers = checked;
+            if (window.gameMode === 'alphabet') {
+                scatterLetters();
+            }
+        };
+
         // Ball Globals
         let ballX = 100, ballY = 100;
         let ballVX = 3, ballVY = 3;
@@ -783,7 +802,6 @@
         const ctx = canvas.getContext('2d');
         let width, height;
 
-        const alphabetLower = "abcdefghijklmnopqrstuvwxyz";
         const scatterContainer = document.getElementById('scatter-container');
         const speedInput = document.getElementById('speed');
         const densityInput = document.getElementById('density');
@@ -797,7 +815,8 @@
         // NEW Helper to update the target letter text
         function updateTargetDisplay() {
             const el = document.getElementById('target-char');
-            if(el) el.innerText = alphabetLower[nextCharIndex];
+            const currentSet = useNumbers ? numbersList : alphabetLower;
+            if(el) el.innerText = currentSet[nextCharIndex];
         }
 
         function resize() {
@@ -853,7 +872,11 @@
                 const maxSize = Math.min(150, height * 0.12);
                 const fontSize = Math.random() * (maxSize - minSize) + minSize;
                 
-                const boxW = fontSize * 0.8; 
+                // Adjust width for double digit numbers
+                const charLen = letterEl.innerText.length;
+                const widthMultiplier = charLen > 1 ? 1.2 : 0.8;
+                
+                const boxW = fontSize * widthMultiplier; 
                 const boxH = fontSize * 0.8;
                 const maxWidth = width - boxW - 40; 
 
@@ -900,17 +923,18 @@
             
             const letterEl = e.target;
             const clickedChar = letterEl.innerText;
-            const targetChar = alphabetLower[nextCharIndex];
+            const currentSet = useNumbers ? numbersList : alphabetLower;
+            const targetChar = currentSet[nextCharIndex];
 
             if (clickedChar === targetChar) {
                 // Correct click
                 const toneIndex = nextCharIndex;
-                // If this is the final letter 'z', chime rapidly 5 times
-                if (toneIndex === alphabetLower.length - 1) {
+                // If this is the final item, chime rapidly 5 times
+                if (toneIndex === currentSet.length - 1) {
                     for (let i = 0; i < 5; i++) {
                         setTimeout(() => playTone(toneIndex), i * 120);
                     }
-                    // Stop the timer automatically when z is pressed
+                    // Stop the timer automatically when last item is pressed
                     if (isRunning) {
                         toggleTimer();
                     }
@@ -921,8 +945,8 @@
                 respawnLetter(letterEl);
 
                 nextCharIndex++;
-                if (nextCharIndex >= alphabetLower.length) {
-                    nextCharIndex = 0; // Reset after z
+                if (nextCharIndex >= currentSet.length) {
+                    nextCharIndex = 0; // Reset after end
                 }
                 updateTargetDisplay(); // Update the visual indicator
             }
@@ -933,10 +957,10 @@
             
             // Reset index if we are re-scattering completely
             nextCharIndex = 0;
-            updateTargetDisplay(); // Ensure display resets to 'a'
+            updateTargetDisplay(); // Ensure display resets to start
             
             scatterContainer.innerHTML = ''; // Clear existing
-            const chars = alphabetLower.split('');
+            const chars = useNumbers ? numbersList : alphabetLower.split('');
             
             // Create elements first
             const letters = chars.map(char => {
