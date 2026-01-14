@@ -1,52 +1,107 @@
+
 # Figure Ground Perception Trainer
 
-A browser-based visual training tool designed to improve figure-ground discrimination skills, often used to aid recovery from post-concussion syndrome.
+A browser-based visual training tool designed to improve figure-ground discrimination skills, sustained attention, and visual sequencing. It is often used to aid recovery from post-concussion syndrome or to train visual processing speed.
 
-It generates a chaotic, procedurally generated background using the HTML5 Canvas API to "camouflage" scattered text characters. The user must visually isolate the static letters from the moving noise.
+It generates a chaotic, procedurally generated background using the HTML5 Canvas API to "camouflage" targets (text or objects). The user must visually isolate the targets from the moving noise.
 
 ## 🚀 Features
 
+### Core Mechanics
+
 -   **Procedural Chaos:** Three distinct noise modes (Geometric Shapes, Digital Rain, Chaotic Lines).
     
--   **Collision-Free Scattering:** Algorithms ensure letters are randomly placed but **never overlap** with each other.
+-   **Collision-Free Scattering:** Algorithms ensure targets are randomly placed but **never overlap** with each other.
     
--   **Smart Layout:** "Safe zones" prevent letters from being hidden behind UI controls or the timer.
-    
--   **Stopwatch & Leaderboard:** Integrated timer with start/stop functionality.
-    
--   **Cloud Persistence:** Automatically saves completion times to Firebase Firestore, allowing history to persist across sessions (per user).
+-   **Smart Layout:** "Safe zones" prevent targets from being hidden behind UI controls or the timer.
     
 -   **Responsive Design:** Adapts to window resizing dynamically.
     
 
+### Game Modes
+
+1.  **Sequential Search (Alphabet & Numbers):** - Find targets in order (e.g., A → B → C or 1 → 2 → 3).
+    
+    -   Includes a visual **Target Display** ("FIND: a") to guide the user.
+        
+    -   **Audio Feedback:** Plays a musical tone for every correct click, building a scale as you progress, with a victory chime at the end.
+        
+    -   **Toggleable Sets:** Switch between the Alphabet (a-z) and Numbers (1-26).
+        
+2.  **Bouncing Ball (Sustained Attention):**
+    
+    -   Track a single moving ball amidst the chaos.
+        
+    -   Click the ball **only** when it turns **RED**.
+        
+    -   Tests impulse control and tracking ability.
+        
+
+### Difficulty Modifiers
+
+-   **Wandering Targets:** An optional setting where letters/numbers float around the screen and bounce off edges, requiring tracking rather than just scanning.
+    
+-   **Randomize Colors:** Randomizes the color of the text targets to increase visual noise and difficulty.
+    
+-   **Adjustable Chaos:** Sliders to control the speed and density of the background distractions.
+    
+
+### Progress Tracking
+
+-   **Stopwatch:** Integrated timer to track performance.
+    
+-   **Leaderboard:** Automatically saves completion times to Firebase Firestore, allowing history to persist across sessions (per user).
+    
+-   **Local History:** Caches recent times locally for immediate feedback.
+    
+
 ## 🎮 How to Use
 
-1.  **Start the Timer:** Click `▶ Start` to begin the session.
+### Mode 1: Alphabet / Numbers
+
+1.  **Select Sequence:** Use the settings to choose between "Alphabet" or "Use Numbers (1-26)".
     
-2.  **The Task:** Visually locate all scattered letters amidst the moving background noise.
+2.  **Start:** Click `▶ Start`. The background noise will begin.
     
-3.  **Stop & Log:** Once the task is complete (e.g., you have read all letters aloud), click `⏹ Stop`.
+3.  **The Task:** Look at the **FIND:** display at the bottom center. Scan the screen for that specific character.
     
-    -   _Note:_ The time is automatically saved to your history if the duration is longer than 0.1 seconds.
-        
-    -   The **History Panel** will open automatically to show your new record.
-        
-4.  **Scramble:** Press **Spacebar** or click `Randomize Positions` to reshuffle the letters for a new round.
+4.  **Interact:** Click the correct character. You will hear a tone, and the target will change to the next in the sequence.
+    
+5.  **Complete:** Once you reach the end (z or 26), the timer stops automatically, and your time is logged.
     
 
-### Controls
+### Mode 2: Bouncing Ball
 
--   **Spacebar:** Randomize letter positions and rotation.
+1.  **Select Mode:** Open Settings and click "Ball".
     
--   **⚙️ Settings:** Open the control panel to adjust:
+2.  **Start:** Click `▶ Start`. A white ball will begin bouncing around the screen.
     
-    -   **Chaos Speed:** How fast the background distractors move.
-        
-    -   **Pattern Density:** How many distractors appear on screen.
-        
-    -   **Change Pattern:** Cycle through the 3 visual noise modes.
-        
--   **🏆 History:** Toggle the personal leaderboard view.
+3.  **The Task:** Follow the ball with your eyes. Ignore the background noise.
+    
+4.  **Interact:** Wait for the ball to flash **RED**. Click it quickly before it turns white again.
+    
+5.  **Win:** Successfully catch the red ball 26 times to complete the session.
+    
+
+## ⚙️ Settings & Controls
+
+Click `⚙️ Settings` to open the control panel:
+
+-   **Game Mode:** Switch between _Alphabet_ and _Ball_.
+    
+-   **Chaos Speed:** Controls how fast the background distractors move.
+    
+-   **Pattern Density:** Controls how many background objects appear.
+    
+-   **Wandering Letters:** (Checkbox) Makes the text targets move around the screen.
+    
+-   **Randomize Colors:** (Checkbox) Changes text targets from white to random bright colors.
+    
+-   **Use Numbers:** (Checkbox) Switches the target set from a-z to 1-26.
+    
+-   **Randomize Positions:** Instantly reshuffles the targets (Spacebar shortcut).
+    
+-   **Change Pattern:** Cycles through the 3 background visual styles.
     
 
 ## 🛠️ Technical Setup
@@ -60,51 +115,26 @@ This is a **Single-File Application** containing HTML, CSS, and JavaScript.
 2.  **Internet:** An internet connection is required to load the Firebase SDK and save/load history data.
     
 
-### Firebase Configuration
-
-The application expects Firebase configuration variables to be present in the global scope. If running locally or outside of the generated environment, you must inject these values before the main script runs, or edit the `<script>` tag in `index.html`:
-
-```
-// Example manual configuration in index.html if not using environment injection
-const __firebase_config = JSON.stringify({
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  // ... other config
-});
-const __app_id = "figure-ground-v1";
-
-```
-
 ### Architecture Details
 
 -   **Frontend:** Vanilla JavaScript (ES6 Modules).
     
--   **Rendering:** HTML5 Canvas (2D Context) for noise; DOM elements for letters (for crisp typography).
+-   **Rendering:** HTML5 Canvas (2D Context) for noise; DOM elements for interaction.
+    
+-   **Audio:** Web Audio API for generating synthesized tones (no external assets required).
     
 -   **Data:** Firebase Firestore.
     
     -   **Collection Path:** `artifacts/{appId}/users/{uid}/leaderboard`
         
-    -   **Queries:** Data is fetched via `onSnapshot` and sorted client-side (in-memory) to minimize database index requirements.
-        
--   **Auth:** Firebase Anonymous Auth (or Custom Token if provided).
-    
-
-## 🎨 Customization
-
-To modify the difficulty or aesthetics, edit the configuration variables in the `<script>` section of `index.html`:
-
--   **Change Characters:** Edit the `alphabetLower` string (e.g., change to numbers `"0123456789"`).
-    
--   **Colors:** Modify the `getRandomColor()` function to change the distractor palette.
-    
--   **Sizing:** Adjust `minSize` and `maxSize` within the `scatterLetters()` function to change target visibility.
+-   **Auth:** Firebase Anonymous Auth.
     
 
 ## ⚠️ Disclaimer
 
 **I am not a doctor or medical professional.** This software is provided for educational and entertainment purposes only. It is not intended to diagnose, treat, cure, or prevent any disease or medical condition, including post-concussion syndrome. Always seek the advice of your physician or other qualified health provider with any questions you may have regarding a medical condition or visual therapy regimen.
+
+**Seizure Warning:** This application contains flashing lights and high-contrast moving patterns.
 
 ## 📄 License
 
