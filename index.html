@@ -177,7 +177,10 @@
             if (window.gameMode === 'ball') return 'Bouncing Ball';
             if (window.gameMode === 'keyball') return 'Key Ball';
             if (window.gameMode === 'peripheral') return 'Peripheral';
-            if (window.gameMode === 'okn') return window.oknTargetMode ? 'OKN Target' : 'OKN Passive';
+            if (window.gameMode === 'okn') {
+                if (window.oknLetterMode) return 'OKN Letters';
+                return window.oknTargetMode ? 'OKN Target' : 'OKN Passive';
+            }
             
             const names = ['Shapes', 'Lines', 'Strokes'];
             const type = window.patternType || 0;
@@ -642,6 +645,12 @@
                     <input type="checkbox" id="okn-target-check" onchange="toggleOknTarget(this.checked)" checked>
                 </label>
             </div>
+            <div class="control-group">
+                <label for="okn-letter-check" style="cursor: pointer;">
+                    Letter Stream Mode
+                    <input type="checkbox" id="okn-letter-check" onchange="toggleOknLetter(this.checked)">
+                </label>
+            </div>
         </div>
 
         <!-- Wandering Letters Checkbox -->
@@ -668,9 +677,12 @@
             </label>
         </div>
         
+        <div class="btn-group" id="pattern-controls">
+            <button class="action-btn" onclick="togglePattern()">Change Pattern</button>
+        </div>
+
         <div class="btn-group" id="alpha-controls">
             <button class="action-btn primary" onclick="scatterLetters()">Randomize Positions</button>
-            <button class="action-btn" onclick="togglePattern()">Change Pattern</button>
         </div>
         
         <div class="btn-group hidden" id="ball-controls">
@@ -743,8 +755,16 @@
         let oknPattern = 'stripes'; // 'stripes', 'checkerboard'
         window.oknStripeWidth = 50;
         window.oknTargetMode = true; // Default to true
+        window.oknLetterMode = false;
         let oknTargetX = 0;
         let oknTargetSpeed = 3;
+        
+        // OKN Key Globals
+        let oknKeyPool = [];
+        let oknTargetChar = null;
+        let oknNextKeyTime = 0;
+        let oknClickCount = 0;
+        let oknTargetColor = '#FFFFFF';
 
         // OKN Helper Functions
         window.setOknDirection = (dir) => {
@@ -760,11 +780,45 @@
 
         window.toggleOknTarget = (isChecked) => {
             window.oknTargetMode = isChecked;
+            updateOknHint();
+        };
+        
+        window.toggleOknLetter = (isChecked) => {
+            window.oknLetterMode = isChecked;
+            if(isChecked) {
+                // Force target mode on if using letters, as letters need the target
+                window.oknTargetMode = true;
+                document.getElementById('okn-target-check').checked = true;
+                if(isRunning) initOknKey();
+            }
+            updateOknHint();
+        };
+        
+        function updateOknHint() {
             const hint = document.getElementById('okn-hint');
             if (hint) {
-                hint.innerText = isChecked ? "Follow the red target" : "Relax and let your eyes adjust";
+                if (window.oknLetterMode) {
+                    hint.innerText = "Type the letter in the red box!";
+                } else {
+                    hint.innerText = window.oknTargetMode ? "Follow the red target" : "Relax and let your eyes adjust";
+                }
             }
-        };
+        }
+        
+        function initOknKey() {
+            oknClickCount = 0;
+            oknTargetChar = null;
+            // Force letters only for OKN
+            const currentSet = alphabetLower.split('');
+            oknKeyPool = [...currentSet];
+            scheduleNextOknKey();
+        }
+        
+        function scheduleNextOknKey() {
+            // Increased delay (0.5s to 2.0s)
+            const delay = Math.random() * 1500 + 500;
+            oknNextKeyTime = Date.now() + delay;
+        }
 
         window.toggleWander = (checked) => {
             wanderingLetters = checked;
@@ -790,6 +844,8 @@
             useNumbers = checked;
             if (window.gameMode === 'alphabet') {
                 scatterLetters();
+            } else if (window.gameMode === 'okn' && window.oknLetterMode && isRunning) {
+                // Ignore numbers toggle for OKN, always letters
             }
         };
 
@@ -880,6 +936,8 @@
                     initKeyBall();
                 } else if (window.gameMode === 'peripheral') {
                     initPeripheral();
+                } else if (window.gameMode === 'okn') {
+                    if (window.oknLetterMode) initOknKey();
                 }
             }
         }
@@ -916,9 +974,14 @@
             
             // Toggle Shared Checkboxes - Explicit Logic
             const isAlphabet = (mode === 'alphabet');
+            const isOkn = (mode === 'okn');
             document.getElementById('wander-control').classList.toggle('hidden', !isAlphabet);
             document.getElementById('color-control').classList.toggle('hidden', !isAlphabet);
+            // Hide numbers from OKN completely
             document.getElementById('number-control').classList.toggle('hidden', !isAlphabet);
+            
+            // Toggle Pattern Controls (Visible everywhere except OKN)
+            document.getElementById('pattern-controls').classList.toggle('hidden', isOkn);
 
             // Toggle Target Display
             const targetDisp = document.getElementById('target-display');
@@ -930,8 +993,7 @@
             if (oknHint) {
                 oknHint.style.display = (mode === 'okn') ? 'block' : 'none';
                 if (mode === 'okn') {
-                    // Refresh hint text based on toggle state
-                    oknHint.innerText = window.oknTargetMode ? "Follow the red target" : "Relax and let your eyes adjust";
+                    updateOknHint();
                 }
             }
 
@@ -1515,6 +1577,27 @@
                     }
                 }
             }
+            
+            // --- OKN Letter Handling ---
+            if (window.gameMode === 'okn' && window.oknLetterMode && isRunning && oknTargetChar) {
+                if (e.key.toLowerCase() === oknTargetChar.toLowerCase()) {
+                    oknClickCount++;
+                    const toneIndex = Math.min(oknClickCount - 1, 25);
+                    playTone(toneIndex);
+                    
+                    oknTargetChar = null; // Remove letter
+                    
+                    if (oknKeyPool.length === 0) {
+                        // Win logic
+                        for (let i = 0; i < 5; i++) {
+                            setTimeout(() => playTone(25), i * 120);
+                        }
+                        toggleTimer();
+                    } else {
+                        scheduleNextOknKey();
+                    }
+                }
+            }
         });
 
         function getRandomColor() {
@@ -1559,9 +1642,11 @@
             // 3. Render Target (if enabled)
             if (window.oknTargetMode) {
                 oknTargetX += oknTargetSpeed * oknDirection;
-                // Wrap target around screen
-                if (oknTargetX > width + 100) oknTargetX = -100;
-                if (oknTargetX < -100) oknTargetX = width + 100;
+                
+                // --- WRAPPING LOGIC (Updated to reduce delay) ---
+                // Box width is 40.
+                if (oknTargetX > width) oknTargetX = -40;
+                if (oknTargetX < -40) oknTargetX = width;
 
                 ctx.fillStyle = '#FF3333';
                 // Draw Target (Rectangle with rounded feel via fillRect)
@@ -1573,6 +1658,27 @@
                 ctx.strokeStyle = '#FFFFFF';
                 ctx.lineWidth = 2;
                 ctx.strokeRect(tx, ty, 40, 80);
+                
+                // 4. Render Letter if OKN Letter Mode is active
+                if (window.oknLetterMode && isRunning) {
+                    const now = Date.now();
+                    
+                    // Logic to spawn
+                    if (!oknTargetChar && oknKeyPool.length > 0 && now >= oknNextKeyTime) {
+                        const idx = Math.floor(Math.random() * oknKeyPool.length);
+                        oknTargetChar = oknKeyPool.splice(idx, 1)[0];
+                        // Randomize Color on spawn (Black or White)
+                        oknTargetColor = Math.random() < 0.5 ? '#FFFFFF' : '#000000';
+                    }
+                    
+                    if (oknTargetChar) {
+                        ctx.fillStyle = oknTargetColor;
+                        ctx.font = 'bold 40px Verdana';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(oknTargetChar, tx + 20, ty + 40); // Center of 40x80 rect
+                    }
+                }
             }
         }
 
