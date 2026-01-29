@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <title>Figure Ground: Scattered Alphabet</title>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -173,13 +173,11 @@
             });
         }
 
-        // --- Updated Pattern Name Logic ---
         function getPatternName() {
             if (window.gameMode === 'ball') return 'Bouncing Ball';
+            if (window.gameMode === 'keyball') return 'Key Ball';
             
-            // Existing logic for Alphabet mode
             const names = ['Shapes', 'Lines', 'Strokes'];
-            // Access patternType from global scope or window
             const type = window.patternType || 0;
             const name = names[type % 3] || 'Unknown';
             return name;
@@ -190,24 +188,20 @@
             const entry = { date: new Date().toISOString(), duration: durationMs, pattern: patternName };
             try { saveLocalEntry(entry); } catch (e) { console.warn('local cache failed', e); }
 
-            // Always perform an optimistic local update so the leaderboard shows immediately
             try {
                 const newEntry = { id: `local-${Date.now()}`, ...entry };
                 currentLeaderboard.unshift(newEntry);
                 if (currentLeaderboard.length > 200) currentLeaderboard.pop();
-                // Render immediately to the currentLeaderboard (which now has the new entry)
                 renderLeaderboard(currentLeaderboard);
                 console.debug('Optimistic update rendered, currentLeaderboard length:', currentLeaderboard.length);
             } catch (e) { console.warn('optimistic update failed', e); }
 
-            // If auth/db not ready, queue the time for later flushing
             if (!user || !db) {
                 console.debug('saveTime: auth/db not ready, queuing duration', durationMs);
                 unsavedTimes.push(durationMs);
                 return;
             }
 
-            // Try persisting to server; on error, queue and keep optimistic UI
             try {
                 await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'leaderboard'), {
                     date: serverTimestamp(),
@@ -272,9 +266,11 @@
             padding: 0;
             width: 100%;
             height: 100%;
-            overflow: hidden;
+            overflow: hidden; /* Important for game feel */
             background-color: #111;
             font-family: Arial, sans-serif;
+            /* Prevent bounce scrolling on mobile */
+            overscroll-behavior: none; 
         }
 
         #noiseCanvas {
@@ -282,6 +278,7 @@
             top: 0;
             left: 0;
             z-index: 1;
+            pointer-events: none;
         }
 
         #scatter-container {
@@ -293,6 +290,8 @@
             z-index: 2;
             pointer-events: none;
             overflow: hidden;
+            /* Improves touch response */
+            touch-action: none;
         }
 
         #scatter-container.hidden {
@@ -305,9 +304,11 @@
             font-weight: 900;
             color: #FFFFFF;
             user-select: none;
+            -webkit-user-select: none;
             text-shadow: 0px 0px 4px rgba(0,0,0,0.7);
             pointer-events: auto; /* Enable clicks on letters */
             cursor: pointer;
+            touch-action: manipulation;
         }
         
         /* Bouncing Ball Styles */
@@ -325,6 +326,18 @@
             transform: translate(-100px, -100px); /* Initial off-screen */
             transition: background-color 0.1s ease;
             pointer-events: auto;
+            touch-action: manipulation;
+            
+            /* Center Text Logic for Key Ball */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Verdana', sans-serif;
+            font-weight: 900;
+            font-size: 30px; 
+            color: #ff3333; /* Red Text */
+            -webkit-user-select: none;
+            user-select: none;
         }
         
         /* Invisible Hitbox Extension */
@@ -342,6 +355,7 @@
             display: none;
         }
 
+        /* Red Background state for Classic Ball mode */
         #bouncing-ball.red {
             background-color: #ff3333;
         }
@@ -361,6 +375,7 @@
             padding: 5px 20px;
             border-radius: 8px;
             pointer-events: none;
+            white-space: nowrap;
         }
 
         .toolbar {
@@ -388,6 +403,7 @@
             display: flex;
             align-items: center;
             gap: 8px;
+            touch-action: manipulation;
         }
         .toolbar button:active {
             transform: scale(0.95);
@@ -423,6 +439,8 @@
             transform-origin: bottom left;
             transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
             pointer-events: auto;
+            max-width: 90vw; /* Prevent overflow on small screens */
+            box-sizing: border-box;
         }
 
         .panel.hidden {
@@ -431,7 +449,6 @@
             pointer-events: none;
         }
 
-        /* Fix: Ensure control groups are properly hidden */
         .btn-group.hidden { display: none; }
 
         #controls { left: 20px; }
@@ -475,6 +492,7 @@
         button.action-btn {
             background: #333; color: #fff; border: 1px solid #555; padding: 10px;
             cursor: pointer; font-weight: bold; border-radius: 4px; transition: background 0.2s;
+            touch-action: manipulation;
         }
         button.action-btn:hover { background: #555; }
         button.action-btn.primary { background: #fff; color: #000; border: none; }
@@ -497,6 +515,13 @@
         .seizure-content { color: #fff; text-align: center; max-width: 900px; }
         .seizure-content h1 { font-size: clamp(22px, 6vw, 54px); margin: 0 0 12px 0; }
         .seizure-content p { font-size: clamp(16px, 3.5vw, 20px); line-height: 1.4; color: #f5f5f5; }
+
+        /* Media queries for better mobile sizing */
+        @media (max-width: 600px) {
+            #timer-display { font-size: 2rem; }
+            .toolbar button { padding: 10px 16px; font-size: 14px; }
+            #target-display span { font-size: 1.5rem; }
+        }
     </style>
 </head>
 <body>
@@ -524,7 +549,7 @@
 
     <div class="toolbar">
         <button id="toggle-btn" onclick="togglePanel('controls')">⚙️ Settings</button>
-        <!-- NEW: Replaced the spacer with a centered display div. CHANGED: display:block by default. -->
+        <!-- Center Display -->
         <div style="flex-grow: 1; display: flex; justify-content: center; align-items: center; pointer-events: none;">
             <div id="target-display" style="color: #fff; font-size: 1.2rem; font-weight: bold; text-shadow: 0 2px 2px rgba(0,0,0,0.8); display: block; font-family: sans-serif;">
                 FIND: <span id="target-char" style="font-size: 2rem; color: #f0ad4e; margin-left: 8px;">a</span>
@@ -540,6 +565,7 @@
             <div class="btn-group" style="flex-direction: row;">
                 <button id="mode-alpha-btn" class="action-btn active-mode" style="flex:1;" onclick="setGameMode('alphabet')">Alphabet</button>
                 <button id="mode-ball-btn" class="action-btn" style="flex:1;" onclick="setGameMode('ball')">Ball</button>
+                <button id="mode-keyball-btn" class="action-btn" style="flex:1;" onclick="setGameMode('keyball')">Key Ball</button>
             </div>
         </div>
 
@@ -552,7 +578,7 @@
             <input type="range" id="density" min="50" max="1500" value="400">
         </div>
 
-        <!-- NEW: Wandering Letters Checkbox -->
+        <!-- Wandering Letters Checkbox -->
         <div class="control-group">
             <label for="wander-check" style="cursor: pointer; align-items: center;">
                 Wandering Letters
@@ -560,7 +586,7 @@
             </label>
         </div>
 
-        <!-- NEW: Random Colors Checkbox -->
+        <!-- Random Colors Checkbox -->
         <div class="control-group">
             <label for="color-check" style="cursor: pointer; align-items: center;">
                 Randomize Colors
@@ -568,7 +594,7 @@
             </label>
         </div>
 
-        <!-- NEW: Use Numbers Checkbox -->
+        <!-- Use Numbers Checkbox -->
         <div class="control-group">
             <label for="numbers-check" style="cursor: pointer; align-items: center;">
                 Use Numbers (1-26)
@@ -590,7 +616,9 @@
                 <label for="ball-size-slider">Ball Size</label>
                 <input type="range" id="ball-size-slider" min="20" max="150" value="50">
             </div>
-             <div style="text-align:center; font-size:12px; color:#aaa; margin-top:5px;">Click the ball when it turns red!</div>
+             <div style="text-align:center; font-size:12px; color:#aaa; margin-top:5px;">
+                 <span id="ball-hint-text">Click the ball when it turns red!</span>
+             </div>
         </div>
     </div>
 
@@ -636,7 +664,7 @@
         }
 
         // --- Game Logic Globals ---
-        window.gameMode = 'alphabet'; // 'alphabet' or 'ball'
+        window.gameMode = 'alphabet'; // 'alphabet', 'ball', 'keyball'
         window.patternType = 0; // 0, 1, 2
         let nextCharIndex = 0; // 0 = 'a', 25 = 'z'
         let wanderingLetters = false; 
@@ -678,6 +706,11 @@
         let redEndTime = 0;
         let ballClickCount = 0; // Counts up to 26
         const ballEl = document.getElementById('bouncing-ball');
+
+        // Key Ball Globals
+        let keyBallPool = [];
+        let targetKeyBallChar = null;
+        let nextKeyBallTime = 0;
 
         // --- Timer Logic ---
         let startTime;
@@ -730,13 +763,14 @@
                 // Reset game logic on start
                 if (window.gameMode === 'alphabet') {
                     nextCharIndex = 0;
-                    scatterLetters(); // This will also update the target display
-                } else {
-                    // Ball mode reset
+                    scatterLetters(); 
+                } else if (window.gameMode === 'ball') {
                     ballClickCount = 0;
                     ballState = 'white';
                     ballEl.classList.remove('red');
                     scheduleNextRed();
+                } else if (window.gameMode === 'keyball') {
+                    initKeyBall();
                 }
             }
         }
@@ -761,10 +795,19 @@
             // Toggle Buttons
             document.getElementById('mode-alpha-btn').classList.toggle('active-mode', mode === 'alphabet');
             document.getElementById('mode-ball-btn').classList.toggle('active-mode', mode === 'ball');
+            document.getElementById('mode-keyball-btn').classList.toggle('active-mode', mode === 'keyball');
             
             // Toggle Controls
             document.getElementById('alpha-controls').classList.toggle('hidden', mode !== 'alphabet');
-            document.getElementById('ball-controls').classList.toggle('hidden', mode !== 'ball');
+            // Show ball controls for both ball modes
+            document.getElementById('ball-controls').classList.toggle('hidden', mode === 'alphabet');
+
+            // Update Hint Text
+            const hint = document.getElementById('ball-hint-text');
+            if (hint) {
+                if (mode === 'ball') hint.innerText = "Click the ball when it turns red!";
+                if (mode === 'keyball') hint.innerText = "Type the letter shown in the ball!";
+            }
 
             // Toggle Target Display (NEW)
             const targetDisp = document.getElementById('target-display');
@@ -779,15 +822,24 @@
                 ball.classList.add('hidden');
                 scatterLetters();
             } else {
+                // Both ball modes
                 scatter.classList.add('hidden');
                 ball.classList.remove('hidden');
-                initBall();
+                if (mode === 'ball') initBall();
+                if (mode === 'keyball') {
+                     // Keyball init is handled in start or here if desired, 
+                     // but initBall resets physics which is good.
+                     initBall();
+                     // Keyball specific init requires start to be pressed to really go,
+                     // but we can clear display
+                     ballEl.innerText = '';
+                     ballEl.classList.remove('red');
+                }
             }
             
             // Stop timer if running when switching modes
             if (isRunning) {
-                toggleTimer(); // This will save time for previous mode, which is fine
-                // But immediate stop is better UX to reset
+                toggleTimer(); 
                 clearInterval(timerInterval);
                 isRunning = false;
                 timerBtn.innerText = "▶ Start";
@@ -819,14 +871,66 @@
             if(el) el.innerText = currentSet[nextCharIndex];
         }
 
+        // --- UPDATED RESIZE LOGIC ---
         function resize() {
+            // Update global dimensions
             width = window.innerWidth;
             height = window.innerHeight;
             canvas.width = width;
             canvas.height = height;
-            
+
+            // 1. Clamp Ball Position immediately if screen shrunk
+            if (window.gameMode === 'ball' || window.gameMode === 'keyball') {
+                // Ensure ball fits in new dimensions
+                // Buffer of 1px to prevent sticking to wall
+                const maxX = width - ballSize;
+                const maxY = height - ballSize;
+                
+                // If ball is outside, bring it in
+                if (ballX > maxX) ballX = Math.max(0, maxX - 1);
+                if (ballY > maxY) ballY = Math.max(0, maxY - 1);
+            }
+
+            // 2. Clamp Letter Positions immediately if screen shrunk
+            // This prevents letters from being stuck off-screen after zooming in or resizing
             if (window.gameMode === 'alphabet') {
-                scatterLetters(); 
+                const letters = document.querySelectorAll('.scattered-letter');
+                letters.forEach(el => {
+                    // We need the element's rendered size
+                    const w = el.offsetWidth || 50; 
+                    const h = el.offsetHeight || 50;
+                    
+                    let newX = el.x; // Use stored physical x/y
+                    let newY = el.y;
+
+                    // Fallback if x/y undefined
+                    if (typeof newX === 'undefined') newX = parseFloat(el.style.left) || 0;
+                    if (typeof newY === 'undefined') newY = parseFloat(el.style.top) || 0;
+                    
+                    let clamped = false;
+                    
+                    // Check Right Edge
+                    if (newX + w > width) {
+                        newX = width - w - 10; // 10px padding from edge
+                        clamped = true;
+                    }
+                    // Check Bottom Edge
+                    if (newY + h > height) {
+                        newY = height - h - 10;
+                        clamped = true;
+                    }
+                    
+                    // Check Left/Top (less common issue, but good for completeness)
+                    if (newX < 0) { newX = 10; clamped = true; }
+                    if (newY < 0) { newY = 10; clamped = true; }
+
+                    if (clamped) {
+                        el.x = newX;
+                        el.y = newY;
+                        el.style.left = `${newX}px`;
+                        el.style.top = `${newY}px`;
+                    }
+                });
             }
         }
         window.addEventListener('resize', resize);
@@ -1005,9 +1109,33 @@
             
             ballState = 'white';
             ballEl.classList.remove('red');
-            scheduleNextRed();
+            ballEl.innerText = ''; // Clear text
+            
+            // Only schedule red for classic ball mode
+            if (window.gameMode === 'ball') {
+                 scheduleNextRed();
+            }
         }
         
+        function initKeyBall() {
+            ballClickCount = 0;
+            ballState = 'white';
+            ballEl.classList.remove('red');
+            ballEl.innerText = '';
+            
+            const currentSet = useNumbers ? numbersList : alphabetLower.split('');
+            keyBallPool = [...currentSet]; // Copy
+            targetKeyBallChar = null;
+            
+            // Schedule first letter
+            scheduleNextKeyBallLetter();
+        }
+
+        function scheduleNextKeyBallLetter() {
+            const delay = Math.random() * 2000 + 1000; // 1-3 seconds delay
+            nextKeyBallTime = Date.now() + delay;
+        }
+
         // Settings Listeners
         const ballSpeedSlider = document.getElementById('ball-speed-slider');
         const ballSizeSlider = document.getElementById('ball-size-slider');
@@ -1034,6 +1162,10 @@
                 ballSize = parseInt(this.value);
                 ballEl.style.width = ballSize + 'px';
                 ballEl.style.height = ballSize + 'px';
+                // Adjust font size dynamically for Key Ball
+                if (window.gameMode === 'keyball') {
+                    ballEl.style.fontSize = (ballSize * 0.6) + 'px';
+                }
             });
         }
 
@@ -1124,26 +1256,42 @@
             // Apply Position (Use transform for performance)
             ballEl.style.transform = `translate(${ballX}px, ${ballY}px)`;
             
-            // Color Logic
+            // --- Color Logic Branching ---
             const now = Date.now();
-            if (ballState === 'white') {
-                if (now >= nextRedTime) {
-                    ballState = 'red';
-                    ballEl.classList.add('red');
-                    redEndTime = now + 1500; // Stay red for 1.5s
+            
+            if (window.gameMode === 'ball') {
+                if (ballState === 'white') {
+                    if (now >= nextRedTime) {
+                        ballState = 'red';
+                        ballEl.classList.add('red');
+                        redEndTime = now + 1500; // Stay red for 1.5s
+                    }
+                } else if (ballState === 'red') {
+                    if (now >= redEndTime) {
+                        ballState = 'white';
+                        ballEl.classList.remove('red');
+                        scheduleNextRed();
+                    }
                 }
-            } else if (ballState === 'red') {
-                if (now >= redEndTime) {
-                    ballState = 'white';
-                    ballEl.classList.remove('red');
-                    scheduleNextRed();
+            } else if (window.gameMode === 'keyball') {
+                // KeyBall Logic: Wait for time, then show char
+                if (targetKeyBallChar === null && keyBallPool.length > 0) {
+                    if (now >= nextKeyBallTime) {
+                         // Pick random char
+                         const idx = Math.floor(Math.random() * keyBallPool.length);
+                         targetKeyBallChar = keyBallPool.splice(idx, 1)[0];
+                         
+                         // Display it
+                         ballEl.innerText = targetKeyBallChar;
+                         ballEl.style.fontSize = (ballSize * 0.6) + 'px';
+                    }
                 }
             }
         }
         
         function handleBallClick(e) {
             e.stopPropagation();
-            if (ballState === 'red') {
+            if (window.gameMode === 'ball' && ballState === 'red') {
                 ballClickCount++;
                 
                 // Play Sound (0-25)
@@ -1180,6 +1328,39 @@
             if (e.code === 'Space') {
                 if (window.gameMode === 'alphabet') {
                     scatterLetters();
+                }
+            }
+            
+            // Key Ball Input Handling
+            if (window.gameMode === 'keyball' && isRunning && targetKeyBallChar) {
+                // Check if key matches
+                // For letters, e.key is likely lowercase 'a'.
+                // For numbers, e.key is '1'.
+                if (e.key.toLowerCase() === targetKeyBallChar.toLowerCase()) {
+                    // Correct!
+                    ballClickCount++;
+                    
+                    // Sound
+                    const toneIndex = Math.min(ballClickCount - 1, 25);
+                    playTone(toneIndex);
+                    
+                    // Clear state
+                    targetKeyBallChar = null;
+                    ballEl.innerText = '';
+                    
+                    // Win Condition
+                    const totalNeeded = useNumbers ? numbersList.length : alphabetLower.length;
+                    
+                    // Note: pool length decreases, so empty pool + no current char = done
+                    if (keyBallPool.length === 0 && targetKeyBallChar === null) {
+                         for (let i = 0; i < 5; i++) {
+                            setTimeout(() => playTone(25), i * 120);
+                        }
+                        if (isRunning) toggleTimer();
+                    } else {
+                        // Schedule next
+                        scheduleNextKeyBallLetter();
+                    }
                 }
             }
         });
@@ -1265,7 +1446,7 @@
             }
 
             // --- Ball Update (Runs every frame for smoothness) ---
-            if (window.gameMode === 'ball' && !ballEl.classList.contains('hidden')) {
+            if ((window.gameMode === 'ball' || window.gameMode === 'keyball') && !ballEl.classList.contains('hidden')) {
                 updateBall();
             }
 
