@@ -170,6 +170,9 @@
             renderLeaderboard(filtered);
         }
 
+        // Attach to window so UI can access
+        window.refreshLeaderboardDisplay = refreshLeaderboardDisplay;
+
         function renderLeaderboard(scores) {
             // Note: scores is now the filtered list
             const list = document.getElementById('leaderboard-list');
@@ -925,6 +928,9 @@
             return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${centis.toString().padStart(2, '0')}`;
         }
 
+        // Attach to window so UI can access
+        window.formatTime = formatTime;
+
         function updateTimer() {
             const now = Date.now();
             elapsed = now - startTime;
@@ -1399,7 +1405,7 @@
             scatterContainer.appendChild(el);
             
             const speedVal = parseInt(speedInput.value); 
-            const flashDuration = 1500 - ((speedVal / 60) * 1300);
+            const flashDuration = (1500 - ((speedVal / 60) * 1300)) + 1000;
             
             setTimeout(() => {
                 if (el.parentNode) el.parentNode.removeChild(el);
