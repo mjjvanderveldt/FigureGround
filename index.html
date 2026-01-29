@@ -17,7 +17,7 @@
         let db, auth, user;
         let leaderboardUnsubscribe = null;
         const unsavedTimes = [];
-        let currentLeaderboard = [];
+        let allRecords = []; // Master list of all fetched records
         const LOCAL_HISTORY_KEY = `fg_history_${appId}`;
 
         function loadLocalHistory() {
@@ -93,7 +93,9 @@
                 if (scores.length === 0) {
                     const local = loadLocalHistory();
                     if (local.length > 0) {
-                        renderLeaderboard(local);
+                        allRecords = local;
+                        refreshLeaderboardDisplay();
+                        
                         (async () => {
                             const collRef = collection(db, 'artifacts', appId, 'users', user.uid, 'leaderboard');
                             for (const e of local.slice().reverse()) {
@@ -109,7 +111,8 @@
                     }
                 }
 
-                renderLeaderboard(scores);
+                allRecords = scores;
+                refreshLeaderboardDisplay();
             }, (error) => {
                 console.error("Error fetching leaderboard:", error);
             });
@@ -120,7 +123,8 @@
                         const local = loadLocalHistory();
                         const list = document.getElementById('leaderboard-list');
                         if (local.length > 0) {
-                            renderLeaderboard(local);
+                            allRecords = local;
+                            refreshLeaderboardDisplay();
                         } else {
                             list.innerHTML = '<div class="empty-state">No times recorded yet.</div>';
                         }
@@ -146,13 +150,34 @@
             })();
         }
 
+        // Helper to filter records based on current mode
+        function refreshLeaderboardDisplay() {
+            if (!allRecords) return;
+            const mode = window.gameMode;
+            
+            const filtered = allRecords.filter(r => {
+                const p = r.pattern;
+                if (!p) return false;
+                
+                if (mode === 'alphabet') return ['Shapes', 'Lines', 'Strokes', 'Unknown'].includes(p);
+                if (mode === 'ball') return p === 'Bouncing Ball';
+                if (mode === 'keyball') return p === 'Key Ball';
+                if (mode === 'peripheral') return p === 'Peripheral';
+                if (mode === 'okn') return ['OKN Letters', 'OKN Target', 'OKN Passive'].includes(p);
+                return true; 
+            });
+            
+            renderLeaderboard(filtered);
+        }
+
         function renderLeaderboard(scores) {
-            currentLeaderboard = Array.isArray(scores) ? scores.slice() : [];
+            // Note: scores is now the filtered list
             const list = document.getElementById('leaderboard-list');
             list.innerHTML = '';
 
-            if (scores.length === 0) {
-                list.innerHTML = '<div class="empty-state">No times recorded yet.</div>';
+            if (!scores || scores.length === 0) {
+                const modeName = getModeDisplayName(window.gameMode);
+                list.innerHTML = `<div class="empty-state">No records for ${modeName} yet.</div>`;
                 return;
             }
 
@@ -171,6 +196,15 @@
                 `;
                 list.appendChild(item);
             });
+        }
+        
+        function getModeDisplayName(mode) {
+            if (mode === 'alphabet') return 'Alphabet';
+            if (mode === 'ball') return 'Bouncing Ball';
+            if (mode === 'keyball') return 'Key Ball';
+            if (mode === 'peripheral') return 'Peripheral';
+            if (mode === 'okn') return 'OKN';
+            return 'Unknown';
         }
 
         function getPatternName() {
@@ -195,10 +229,11 @@
 
             try {
                 const newEntry = { id: `local-${Date.now()}`, ...entry };
-                currentLeaderboard.unshift(newEntry);
-                if (currentLeaderboard.length > 200) currentLeaderboard.pop();
-                renderLeaderboard(currentLeaderboard);
-                console.debug('Optimistic update rendered, currentLeaderboard length:', currentLeaderboard.length);
+                allRecords.unshift(newEntry);
+                if (allRecords.length > 200) allRecords.pop();
+                
+                refreshLeaderboardDisplay();
+                console.debug('Optimistic update rendered');
             } catch (e) { console.warn('optimistic update failed', e); }
 
             if (!user || !db) {
@@ -226,7 +261,8 @@
                     const local = loadLocalHistory();
                     const list = document.getElementById('leaderboard-list');
                     if (local.length > 0) {
-                        renderLeaderboard(local);
+                        allRecords = local;
+                        refreshLeaderboardDisplay();
                     } else if (list) {
                         list.innerHTML = '<div class="empty-state">No times recorded yet.</div>';
                     }
@@ -252,7 +288,7 @@
             try {
                 clearLocalHistory();
             } catch (e) { console.warn('clearLocalHistory failed', e); }
-            currentLeaderboard = [];
+            allRecords = [];
             renderLeaderboard([]);
 
             if (!db || !user) return;
@@ -1048,6 +1084,9 @@
                 elapsed = 0;
                 timerDisplay.innerText = "00:00.00";
             }
+            
+            // Refresh Leaderboard
+            refreshLeaderboardDisplay();
         };
 
         // --- Canvas & Scatter Logic ---
