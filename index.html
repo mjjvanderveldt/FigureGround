@@ -335,7 +335,9 @@
             z-index: 50; /* Above noise, below panels */
             pointer-events: none;
             user-select: none;
+            /* Add white border via text-stroke or shadow simulation */
             text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+            -webkit-text-stroke: 2px white;
         }
         #fixation-cross.hidden { display: none; }
         
@@ -614,7 +616,7 @@
         <div id="shared-controls">
             <div class="control-group">
                 <label for="speed">Chaos Speed <span>(Fast)</span></label>
-                <input type="range" id="speed" min="1" max="60" value="45">
+                <input type="range" id="speed" min="1" max="60" value="40">
             </div>
             <div class="control-group">
                 <label for="density">Pattern Density <span>(High)</span></label>
@@ -648,7 +650,7 @@
             <div class="control-group">
                 <label for="okn-letter-check" style="cursor: pointer;">
                     Letter Stream Mode
-                    <input type="checkbox" id="okn-letter-check" onchange="toggleOknLetter(this.checked)">
+                    <input type="checkbox" id="okn-letter-check" onchange="toggleOknLetter(this.checked)" checked>
                 </label>
             </div>
         </div>
@@ -755,9 +757,9 @@
         let oknPattern = 'stripes'; // 'stripes', 'checkerboard'
         window.oknStripeWidth = 50;
         window.oknTargetMode = true; // Default to true
-        window.oknLetterMode = false;
+        window.oknLetterMode = true; // Default to true per request
         let oknTargetX = 0;
-        let oknTargetSpeed = 3;
+        let oknTargetSpeed = 4; // Faster speed per request
         
         // OKN Key Globals
         let oknKeyPool = [];
@@ -869,6 +871,7 @@
         let targetPeripheralChar = null;
         let nextPeripheralTime = 0;
         let peripheralClickCount = 0;
+        let peripheralTimeout = null;
 
         // --- Timer Logic ---
         let startTime;
@@ -1032,6 +1035,7 @@
             } else if (mode === 'okn') {
                 // OKN init logic (defaults)
                 setOknDirection(oknDirection);
+                if (window.oknLetterMode) initOknKey();
             }
             
             // Stop timer if running when switching modes
@@ -1311,6 +1315,7 @@
         function clearPeripheral() {
             targetPeripheralChar = null;
             scatterContainer.innerHTML = ''; 
+            clearTimeout(peripheralTimeout);
         }
 
         function scheduleNextPeripheralTarget() {
@@ -1360,6 +1365,16 @@
             setTimeout(() => {
                 if (el.parentNode) el.parentNode.removeChild(el);
             }, flashDuration);
+
+            // Set Miss Timeout (3 seconds from start of spawn)
+            clearTimeout(peripheralTimeout);
+            peripheralTimeout = setTimeout(() => {
+                if (targetPeripheralChar && isRunning) {
+                    console.debug('Peripheral target missed');
+                    targetPeripheralChar = null; // Missed
+                    scheduleNextPeripheralTarget();
+                }
+            }, 3000);
         }
 
         function scheduleNextKeyBallLetter() {
@@ -1544,6 +1559,7 @@
                     playTone(toneIndex);
 
                     targetPeripheralChar = null; 
+                    clearTimeout(peripheralTimeout); // Clear miss timeout on success
                     
                      if (peripheralPool.length === 0) {
                         for (let i = 0; i < 5; i++) {
@@ -1673,7 +1689,7 @@
                     
                     if (oknTargetChar) {
                         ctx.fillStyle = oknTargetColor;
-                        ctx.font = 'bold 40px Verdana';
+                        ctx.font = 'bold 25px Verdana';
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
                         ctx.fillText(oknTargetChar, tx + 20, ty + 40); // Center of 40x80 rect
