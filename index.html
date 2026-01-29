@@ -625,12 +625,23 @@
     <div class="toolbar">
         <button id="toggle-btn" onclick="togglePanel('controls')">⚙️ Settings</button>
         <!-- Center Display -->
-        <div style="flex-grow: 1; display: flex; justify-content: center; align-items: center; pointer-events: none;">
-            <div id="target-display" style="color: #fff; font-size: 1.2rem; font-weight: bold; text-shadow: 0 2px 2px rgba(0,0,0,0.8); display: block; font-family: sans-serif;">
+        <div style="flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; pointer-events: none; text-align: center;">
+            <div id="target-display" style="color: #fff; font-size: 1.2rem; font-weight: bold; text-shadow: 0 2px 2px rgba(0,0,0,0.8); display: none; font-family: sans-serif;">
                 FIND: <span id="target-char" style="font-size: 2rem; color: #f0ad4e; margin-left: 8px;">a</span>
             </div>
-            <div id="peripheral-hint" style="color: #ccc; font-size: 1rem; font-family: sans-serif; display: none;">
-                 Focus on center +
+            
+            <!-- Game Instructions -->
+            <div id="alphabet-hint" style="color: #ccc; font-size: 1rem; font-family: sans-serif; display: none; text-shadow: 0 1px 2px black;">
+                 Find and click the hidden character
+            </div>
+            <div id="ball-hint" style="color: #ccc; font-size: 1rem; font-family: sans-serif; display: none; text-shadow: 0 1px 2px black;">
+                 Click the ball when it turns red!
+            </div>
+            <div id="keyball-hint" style="color: #ccc; font-size: 1rem; font-family: sans-serif; display: none; text-shadow: 0 1px 2px black;">
+                 Type the letter shown in the ball
+            </div>
+            <div id="peripheral-hint" style="color: #ccc; font-size: 1rem; font-family: sans-serif; display: none; text-shadow: 0 1px 2px black;">
+                 Focus on center +, type flashing letters
             </div>
             <div id="okn-hint" style="color: #ccc; font-size: 1rem; font-family: sans-serif; display: none; text-shadow: 0 1px 2px black;">
                 Relax and let your eyes adjust
@@ -735,9 +746,6 @@
                 <label for="ball-size-slider">Ball Size</label>
                 <input type="range" id="ball-size-slider" min="20" max="150" value="50">
             </div>
-             <div style="text-align:center; font-size:12px; color:#aaa; margin-top:5px;">
-                 <span id="ball-hint-text">Click the ball when it turns red!</span>
-             </div>
         </div>
     </div>
 
@@ -1029,25 +1037,25 @@
             // Toggle Pattern Controls (Visible everywhere except OKN)
             document.getElementById('pattern-controls').classList.toggle('hidden', isOkn);
 
-            // Toggle Target Display
-            const targetDisp = document.getElementById('target-display');
-            const peripheralHint = document.getElementById('peripheral-hint');
-            const oknHint = document.getElementById('okn-hint');
-            
-            if (targetDisp) targetDisp.style.display = (mode === 'alphabet') ? 'block' : 'none';
-            if (peripheralHint) peripheralHint.style.display = (mode === 'peripheral') ? 'block' : 'none';
-            if (oknHint) {
-                oknHint.style.display = (mode === 'okn') ? 'block' : 'none';
-                if (mode === 'okn') {
-                    updateOknHint();
-                }
-            }
+            // Toggle Target Display & Hints
+            const hintIds = ['target-display', 'alphabet-hint', 'ball-hint', 'keyball-hint', 'peripheral-hint', 'okn-hint'];
+            hintIds.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = 'none';
+            });
 
-            // Update Hint Text for Ball Modes
-            const hint = document.getElementById('ball-hint-text');
-            if (hint) {
-                if (mode === 'ball') hint.innerText = "Click the ball when it turns red!";
-                if (mode === 'keyball') hint.innerText = "Type the letter shown in the ball!";
+            if (mode === 'alphabet') {
+                document.getElementById('target-display').style.display = 'block';
+                document.getElementById('alphabet-hint').style.display = 'block';
+            } else if (mode === 'ball') {
+                document.getElementById('ball-hint').style.display = 'block';
+            } else if (mode === 'keyball') {
+                document.getElementById('keyball-hint').style.display = 'block';
+            } else if (mode === 'peripheral') {
+                document.getElementById('peripheral-hint').style.display = 'block';
+            } else if (mode === 'okn') {
+                document.getElementById('okn-hint').style.display = 'block';
+                updateOknHint();
             }
 
             // Toggle Elements
@@ -1071,9 +1079,9 @@
                 ball.classList.remove('hidden');
                 if (mode === 'ball') initBall();
                 if (mode === 'keyball') {
-                     initBall();
-                     ballEl.innerText = '';
-                     ballEl.classList.remove('red');
+                      initBall();
+                      ballEl.innerText = '';
+                      ballEl.classList.remove('red');
                 }
             } else if (mode === 'okn') {
                 // OKN init logic (defaults)
@@ -1553,11 +1561,11 @@
             } else if (window.gameMode === 'keyball') {
                 if (targetKeyBallChar === null && keyBallPool.length > 0) {
                     if (now >= nextKeyBallTime) {
-                         const idx = Math.floor(Math.random() * keyBallPool.length);
-                         targetKeyBallChar = keyBallPool.splice(idx, 1)[0];
-                         
-                         ballEl.innerText = targetKeyBallChar;
-                         ballEl.style.fontSize = (ballSize * 0.6) + 'px';
+                          const idx = Math.floor(Math.random() * keyBallPool.length);
+                          targetKeyBallChar = keyBallPool.splice(idx, 1)[0];
+                          
+                          ballEl.innerText = targetKeyBallChar;
+                          ballEl.style.fontSize = (ballSize * 0.6) + 'px';
                     }
                 }
             }
@@ -1616,7 +1624,7 @@
                         currentPeripheralEl = null;
                     }
                     
-                     if (peripheralPool.length === 0) {
+                      if (peripheralPool.length === 0) {
                         for (let i = 0; i < 5; i++) {
                             setTimeout(() => playTone(25), i * 120);
                         }
