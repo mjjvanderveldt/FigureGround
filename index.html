@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <title>Figure Ground: Scattered Alphabet</title>
+    <title>Figure Ground: Scattered Alphabet & OKN</title>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -177,6 +177,7 @@
             if (window.gameMode === 'ball') return 'Bouncing Ball';
             if (window.gameMode === 'keyball') return 'Key Ball';
             if (window.gameMode === 'peripheral') return 'Peripheral';
+            if (window.gameMode === 'okn') return window.oknTargetMode ? 'OKN Target' : 'OKN Passive';
             
             const names = ['Shapes', 'Lines', 'Strokes'];
             const type = window.patternType || 0;
@@ -234,6 +235,13 @@
                 const btn = document.getElementById('clear-history-btn');
                 if (btn) btn.addEventListener('click', clearHistory);
             } catch (e) { /* ignore */ }
+            
+            // Setup OKN Listeners
+            const speedSlider = document.getElementById('okn-speed-slider');
+            if (speedSlider) speedSlider.addEventListener('input', (e) => { window.oknSpeed = parseInt(e.target.value); });
+
+            const stripeSlider = document.getElementById('okn-stripe-slider');
+            if (stripeSlider) stripeSlider.addEventListener('input', (e) => { window.oknStripeWidth = parseInt(e.target.value); });
         });
 
         async function clearHistory() {
@@ -466,7 +474,12 @@
             pointer-events: none;
         }
 
-        .btn-group.hidden { display: none; }
+        /* --- VISIBILITY HELPERS --- */
+        .btn-group.hidden, 
+        .control-group.hidden, 
+        #shared-controls.hidden { 
+            display: none !important; 
+        }
 
         #controls { left: 20px; }
         
@@ -575,6 +588,9 @@
             <div id="peripheral-hint" style="color: #ccc; font-size: 1rem; font-family: sans-serif; display: none;">
                  Focus on center +
             </div>
+            <div id="okn-hint" style="color: #ccc; font-size: 1rem; font-family: sans-serif; display: none; text-shadow: 0 1px 2px black;">
+                Relax and let your eyes adjust
+           </div>
         </div> 
         <button id="timer-btn" onclick="toggleTimer()">▶ Start</button>
         <button id="lb-toggle-btn" onclick="togglePanel('leaderboard')">🏆 History</button>
@@ -584,24 +600,52 @@
         <div class="control-group">
             <label>Game Mode</label>
             <div class="btn-group" style="flex-direction: row; flex-wrap: wrap;">
-                <button id="mode-alpha-btn" class="action-btn active-mode" style="flex:1; min-width: 70px;" onclick="setGameMode('alphabet')">Alphabet</button>
-                <button id="mode-ball-btn" class="action-btn" style="flex:1; min-width: 70px;" onclick="setGameMode('ball')">Ball</button>
-                <button id="mode-keyball-btn" class="action-btn" style="flex:1; min-width: 70px;" onclick="setGameMode('keyball')">Key Ball</button>
-                <button id="mode-peripheral-btn" class="action-btn" style="flex:1; min-width: 70px;" onclick="setGameMode('peripheral')">Peripheral</button>
+                <button id="mode-alpha-btn" class="action-btn active-mode" style="flex:1; min-width: 60px; font-size: 12px;" onclick="setGameMode('alphabet')">Alphabet</button>
+                <button id="mode-ball-btn" class="action-btn" style="flex:1; min-width: 60px; font-size: 12px;" onclick="setGameMode('ball')">Ball</button>
+                <button id="mode-keyball-btn" class="action-btn" style="flex:1; min-width: 60px; font-size: 12px;" onclick="setGameMode('keyball')">Key Ball</button>
+                <button id="mode-peripheral-btn" class="action-btn" style="flex:1; min-width: 60px; font-size: 12px;" onclick="setGameMode('peripheral')">Periph</button>
+                <button id="mode-okn-btn" class="action-btn" style="flex:1; min-width: 60px; font-size: 12px;" onclick="setGameMode('okn')">OKN</button>
             </div>
         </div>
 
-        <div class="control-group">
-            <label for="speed">Chaos Speed <span>(Fast)</span></label>
-            <input type="range" id="speed" min="1" max="60" value="45">
+        <div id="shared-controls">
+            <div class="control-group">
+                <label for="speed">Chaos Speed <span>(Fast)</span></label>
+                <input type="range" id="speed" min="1" max="60" value="45">
+            </div>
+            <div class="control-group">
+                <label for="density">Pattern Density <span>(High)</span></label>
+                <input type="range" id="density" min="50" max="1500" value="400">
+            </div>
         </div>
-        <div class="control-group">
-            <label for="density">Pattern Density <span>(High)</span></label>
-            <input type="range" id="density" min="50" max="1500" value="400">
+
+        <!-- OKN Controls (Hidden by default) -->
+        <div class="btn-group hidden" id="okn-controls">
+            <div class="control-group">
+                <label for="okn-speed-slider">Scroll Speed</label>
+                <input type="range" id="okn-speed-slider" min="1" max="20" value="4">
+            </div>
+            <div class="control-group">
+                <label for="okn-stripe-slider">Stripe Width</label>
+                <input type="range" id="okn-stripe-slider" min="20" max="150" value="50">
+            </div>
+            <div class="control-group" style="flex-direction: row; gap: 10px;">
+                <button class="action-btn" id="okn-dir-ltr" onclick="setOknDirection(1)" style="flex:1;">→ L to R</button>
+                <button class="action-btn" id="okn-dir-rtl" onclick="setOknDirection(-1)" style="flex:1;">← R to L</button>
+            </div>
+            <div class="control-group">
+                <button class="action-btn" onclick="toggleOknPattern()">Toggle Checkerboard</button>
+            </div>
+            <div class="control-group">
+                <label for="okn-target-check" style="cursor: pointer;">
+                    Target Tracking Mode
+                    <input type="checkbox" id="okn-target-check" onchange="toggleOknTarget(this.checked)" checked>
+                </label>
+            </div>
         </div>
 
         <!-- Wandering Letters Checkbox -->
-        <div class="control-group">
+        <div class="control-group" id="wander-control">
             <label for="wander-check" style="cursor: pointer; align-items: center;">
                 Wandering Letters
                 <input type="checkbox" id="wander-check" onchange="toggleWander(this.checked)" style="width: 20px; height: 20px; margin: 0; cursor: pointer;">
@@ -609,7 +653,7 @@
         </div>
 
         <!-- Random Colors Checkbox -->
-        <div class="control-group">
+        <div class="control-group" id="color-control">
             <label for="color-check" style="cursor: pointer; align-items: center;">
                 Randomize Colors
                 <input type="checkbox" id="color-check" onchange="toggleRandomColors(this.checked)" style="width: 20px; height: 20px; margin: 0; cursor: pointer;">
@@ -617,7 +661,7 @@
         </div>
 
         <!-- Use Numbers Checkbox -->
-        <div class="control-group">
+        <div class="control-group" id="number-control">
             <label for="numbers-check" style="cursor: pointer; align-items: center;">
                 Use Numbers (1-26)
                 <input type="checkbox" id="numbers-check" onchange="toggleUseNumbers(this.checked)" style="width: 20px; height: 20px; margin: 0; cursor: pointer;">
@@ -686,11 +730,41 @@
         }
 
         // --- Game Logic Globals ---
-        window.gameMode = 'alphabet'; // 'alphabet', 'ball', 'keyball', 'peripheral'
+        window.gameMode = 'alphabet'; // 'alphabet', 'ball', 'keyball', 'peripheral', 'okn'
         window.patternType = 0; // 0, 1, 2
         let nextCharIndex = 0; // 0 = 'a', 25 = 'z'
         let wanderingLetters = false; 
-        let randomColors = false; // NEW state
+        let randomColors = false;
+
+        // --- OKN Globals ---
+        let oknScrollOffset = 0;
+        window.oknSpeed = 4;
+        let oknDirection = 1; // 1 = LTR, -1 = RTL
+        let oknPattern = 'stripes'; // 'stripes', 'checkerboard'
+        window.oknStripeWidth = 50;
+        window.oknTargetMode = true; // Default to true
+        let oknTargetX = 0;
+        let oknTargetSpeed = 3;
+
+        // OKN Helper Functions
+        window.setOknDirection = (dir) => {
+            oknDirection = dir;
+            // Update button styles to show active direction
+            document.getElementById('okn-dir-ltr').classList.toggle('active-mode', dir === 1);
+            document.getElementById('okn-dir-rtl').classList.toggle('active-mode', dir === -1);
+        };
+
+        window.toggleOknPattern = () => {
+            oknPattern = (oknPattern === 'stripes') ? 'checkerboard' : 'stripes';
+        };
+
+        window.toggleOknTarget = (isChecked) => {
+            window.oknTargetMode = isChecked;
+            const hint = document.getElementById('okn-hint');
+            if (hint) {
+                hint.innerText = isChecked ? "Follow the red target" : "Relax and let your eyes adjust";
+            }
+        };
 
         window.toggleWander = (checked) => {
             wanderingLetters = checked;
@@ -832,20 +906,36 @@
             document.getElementById('mode-ball-btn').classList.toggle('active-mode', mode === 'ball');
             document.getElementById('mode-keyball-btn').classList.toggle('active-mode', mode === 'keyball');
             document.getElementById('mode-peripheral-btn').classList.toggle('active-mode', mode === 'peripheral');
+            document.getElementById('mode-okn-btn').classList.toggle('active-mode', mode === 'okn');
             
             // Toggle Controls
             document.getElementById('alpha-controls').classList.toggle('hidden', mode !== 'alphabet');
-            // Show ball controls for both ball modes
-            document.getElementById('ball-controls').classList.toggle('hidden', mode === 'alphabet' || mode === 'peripheral');
+            document.getElementById('ball-controls').classList.toggle('hidden', mode !== 'ball' && mode !== 'keyball');
+            document.getElementById('okn-controls').classList.toggle('hidden', mode !== 'okn');
+            document.getElementById('shared-controls').classList.toggle('hidden', mode === 'okn');
+            
+            // Toggle Shared Checkboxes - Explicit Logic
+            const isAlphabet = (mode === 'alphabet');
+            document.getElementById('wander-control').classList.toggle('hidden', !isAlphabet);
+            document.getElementById('color-control').classList.toggle('hidden', !isAlphabet);
+            document.getElementById('number-control').classList.toggle('hidden', !isAlphabet);
 
             // Toggle Target Display
             const targetDisp = document.getElementById('target-display');
             const peripheralHint = document.getElementById('peripheral-hint');
+            const oknHint = document.getElementById('okn-hint');
             
             if (targetDisp) targetDisp.style.display = (mode === 'alphabet') ? 'block' : 'none';
             if (peripheralHint) peripheralHint.style.display = (mode === 'peripheral') ? 'block' : 'none';
+            if (oknHint) {
+                oknHint.style.display = (mode === 'okn') ? 'block' : 'none';
+                if (mode === 'okn') {
+                    // Refresh hint text based on toggle state
+                    oknHint.innerText = window.oknTargetMode ? "Follow the red target" : "Relax and let your eyes adjust";
+                }
+            }
 
-            // Update Hint Text
+            // Update Hint Text for Ball Modes
             const hint = document.getElementById('ball-hint-text');
             if (hint) {
                 if (mode === 'ball') hint.innerText = "Click the ball when it turns red!";
@@ -869,8 +959,7 @@
             } else if (mode === 'peripheral') {
                 scatter.classList.remove('hidden'); // We reuse scatter container for ephemeral letters
                 cross.classList.remove('hidden');
-            } else {
-                // Both ball modes
+            } else if (mode === 'ball' || mode === 'keyball') {
                 ball.classList.remove('hidden');
                 if (mode === 'ball') initBall();
                 if (mode === 'keyball') {
@@ -878,6 +967,9 @@
                      ballEl.innerText = '';
                      ballEl.classList.remove('red');
                 }
+            } else if (mode === 'okn') {
+                // OKN init logic (defaults)
+                setOknDirection(oknDirection);
             }
             
             // Stop timer if running when switching modes
@@ -924,12 +1016,9 @@
 
             // 1. Clamp Ball Position immediately if screen shrunk
             if (window.gameMode === 'ball' || window.gameMode === 'keyball') {
-                // Ensure ball fits in new dimensions
-                // Buffer of 1px to prevent sticking to wall
                 const maxX = width - ballSize;
                 const maxY = height - ballSize;
                 
-                // If ball is outside, bring it in
                 if (ballX > maxX) ballX = Math.max(0, maxX - 1);
                 if (ballY > maxY) ballY = Math.max(0, maxY - 1);
             }
@@ -938,31 +1027,25 @@
             if (window.gameMode === 'alphabet') {
                 const letters = document.querySelectorAll('.scattered-letter');
                 letters.forEach(el => {
-                    // We need the element's rendered size
                     const w = el.offsetWidth || 50; 
                     const h = el.offsetHeight || 50;
                     
-                    let newX = el.x; // Use stored physical x/y
+                    let newX = el.x; 
                     let newY = el.y;
 
-                    // Fallback if x/y undefined
                     if (typeof newX === 'undefined') newX = parseFloat(el.style.left) || 0;
                     if (typeof newY === 'undefined') newY = parseFloat(el.style.top) || 0;
                     
                     let clamped = false;
                     
-                    // Check Right Edge
                     if (newX + w > width) {
-                        newX = width - w - 10; // 10px padding from edge
+                        newX = width - w - 10;
                         clamped = true;
                     }
-                    // Check Bottom Edge
                     if (newY + h > height) {
                         newY = height - h - 10;
                         clamped = true;
                     }
-                    
-                    // Check Left/Top (less common issue, but good for completeness)
                     if (newX < 0) { newX = 10; clamped = true; }
                     if (newY < 0) { newY = 10; clamped = true; }
 
@@ -979,17 +1062,14 @@
 
         // Helper to check collision with existing DOM elements or explicit boxes
         function checkCollision(x, y, w, h, ignoreElement = null) {
-            // Get all current letters
             const letters = document.querySelectorAll('.scattered-letter');
             
             for (const other of letters) {
                 if (other === ignoreElement) continue;
 
-                // Get computed style positions
                 const rect = other.getBoundingClientRect();
                 const padding = 5;
 
-                // Note: rect.x includes window scroll, but body is overflow hidden
                 if (
                     x < rect.left + rect.width + padding &&
                     x + w > rect.left - padding &&
@@ -1003,11 +1083,9 @@
         }
 
         function respawnLetter(letterEl) {
-            // Temporarily hide to visually "disappear"
             letterEl.style.opacity = '0';
             letterEl.style.pointerEvents = 'none';
 
-            // Find new spot
             let foundSpot = false;
             let bestX = 0, bestY = 0, bestSize = 0, bestRot = 0;
 
@@ -1018,7 +1096,6 @@
                 const maxSize = Math.min(150, height * 0.12);
                 const fontSize = Math.random() * (maxSize - minSize) + minSize;
                 
-                // Adjust width for double digit numbers
                 const charLen = letterEl.innerText.length;
                 const widthMultiplier = charLen > 1 ? 1.2 : 0.8;
                 
@@ -1044,24 +1121,21 @@
                 }
             }
 
-            // Init simulation props (NEW)
             letterEl.x = bestX;
             letterEl.y = bestY;
-            const speed = 0.8; // Wander speed
+            const speed = 0.8; 
             letterEl.vx = (Math.random() - 0.5) * speed;
             letterEl.vy = (Math.random() - 0.5) * speed;
 
-            // Apply new styles
             letterEl.style.fontSize = `${bestSize}px`;
             letterEl.style.left = `${bestX}px`;
             letterEl.style.top = `${bestY}px`;
             letterEl.style.transform = `rotate(${bestRot}deg)`;
 
-            // Make it reappear
             setTimeout(() => {
                 letterEl.style.opacity = '1';
                 letterEl.style.pointerEvents = 'auto';
-            }, 50); // Short delay to register the visual break
+            }, 50);
         }
 
         function handleLetterClick(e) {
@@ -1075,12 +1149,10 @@
             if (clickedChar === targetChar) {
                 // Correct click
                 const toneIndex = nextCharIndex;
-                // If this is the final item, chime rapidly 5 times
                 if (toneIndex === currentSet.length - 1) {
                     for (let i = 0; i < 5; i++) {
                         setTimeout(() => playTone(toneIndex), i * 120);
                     }
-                    // Stop the timer automatically when last item is pressed
                     if (isRunning) {
                         toggleTimer();
                     }
@@ -1101,19 +1173,16 @@
         function scatterLetters() {
             if (window.gameMode !== 'alphabet') return;
             
-            // Reset index if we are re-scattering completely
             nextCharIndex = 0;
-            updateTargetDisplay(); // Ensure display resets to start
+            updateTargetDisplay(); 
             
-            scatterContainer.innerHTML = ''; // Clear existing
+            scatterContainer.innerHTML = ''; 
             const chars = useNumbers ? numbersList : alphabetLower.split('');
             
-            // Create elements first
             const letters = chars.map(char => {
                 const el = document.createElement('div');
                 el.classList.add('scattered-letter');
                 el.innerText = char;
-                // NEW: Set color based on state
                 el.style.color = randomColors ? getRandomBrightColor() : '#FFFFFF';
                 
                 el.addEventListener('mousedown', handleLetterClick); // Add click handler
@@ -1122,7 +1191,6 @@
                 return el;
             });
 
-            // Position them
             letters.forEach(letterEl => {
                 respawnLetter(letterEl);
             });
@@ -1134,26 +1202,22 @@
             ballX = width / 2;
             ballY = height / 2;
             
-            // Use slider value for speed
             const speedSlider = document.getElementById('ball-speed-slider');
             const baseSpeed = speedSlider ? parseInt(speedSlider.value) : 6;
             
-            // Size
             const sizeSlider = document.getElementById('ball-size-slider');
             ballSize = sizeSlider ? parseInt(sizeSlider.value) : 50;
             ballEl.style.width = ballSize + 'px';
             ballEl.style.height = ballSize + 'px';
 
-            // Random direction, constant speed
             const angle = Math.random() * Math.PI * 2;
             ballVX = Math.cos(angle) * baseSpeed;
             ballVY = Math.sin(angle) * baseSpeed;
             
             ballState = 'white';
             ballEl.classList.remove('red');
-            ballEl.innerText = ''; // Clear text
+            ballEl.innerText = ''; 
             
-            // Only schedule red for classic ball mode
             if (window.gameMode === 'ball') {
                  scheduleNextRed();
             }
@@ -1166,10 +1230,9 @@
             ballEl.innerText = '';
             
             const currentSet = useNumbers ? numbersList : alphabetLower.split('');
-            keyBallPool = [...currentSet]; // Copy
+            keyBallPool = [...currentSet]; 
             targetKeyBallChar = null;
             
-            // Schedule first letter
             scheduleNextKeyBallLetter();
         }
 
@@ -1185,12 +1248,11 @@
 
         function clearPeripheral() {
             targetPeripheralChar = null;
-            scatterContainer.innerHTML = ''; // Clear any ephemeral
+            scatterContainer.innerHTML = ''; 
         }
 
         function scheduleNextPeripheralTarget() {
              if (!isRunning || window.gameMode !== 'peripheral') return;
-             // Delay between inputs
              const delay = Math.random() * 2000 + 1000; 
              nextPeripheralTime = Date.now() + delay;
         }
@@ -1198,19 +1260,9 @@
         function spawnPeripheralTarget() {
             if (peripheralPool.length === 0) return;
 
-            // Pick char
             const idx = Math.floor(Math.random() * peripheralPool.length);
-            const char = peripheralPool[idx];
-            // Remove it from pool? Wait until they type it to remove.
-            // For now, let's keep it in pool until they type it, but we need to know what to display.
-            // Actually, we pick one, show it, wait for input.
-            // If we remove now, and they miss it? 
-            // Better logic: Pick one to be the 'active' target.
-            
-            // Note: If targetPeripheralChar is NOT null, it means the user hasn't typed the previous one yet?
-            // Or does it disappear?
-            // "Briefly flash... user must identify".
-            // So we remove from pool, set as active target, flash it.
+            // We don't remove from pool in peripheral mode until correct hit in some designs, 
+            // but spec implies identification. Let's pick one to show.
             
             targetPeripheralChar = peripheralPool.splice(idx, 1)[0];
             
@@ -1218,22 +1270,20 @@
             el.classList.add('scattered-letter');
             el.innerText = targetPeripheralChar;
             el.style.color = randomColors ? getRandomBrightColor() : '#FFFFFF';
-            el.style.fontSize = '80px'; // Big for peripheral visibility
+            el.style.fontSize = '80px'; 
             
-            // Position Logic: < 10% or > 90%
             const isLeft = Math.random() < 0.5;
             const zoneWidth = width * 0.15; // 15% zone
             
             let posX;
             if (isLeft) {
-                posX = Math.random() * (zoneWidth - 80); // Ensure it fits
+                posX = Math.random() * (zoneWidth - 80); 
                 if (posX < 10) posX = 10;
             } else {
                 posX = width - zoneWidth + (Math.random() * (zoneWidth - 80));
                 if (posX > width - 90) posX = width - 90;
             }
             
-            // Y position (avoid top/bottom bars)
             const safeY = height - uiTopMargin - uiBottomMargin;
             const posY = uiTopMargin + (Math.random() * (safeY - 80));
             
@@ -1242,15 +1292,7 @@
             
             scatterContainer.appendChild(el);
             
-            // Flash Duration logic
-            // Use Chaos Speed slider to control flash duration?
-            // Low slider (high speed value) = Fast flash
-            // Slider 1-60. 
-            // Flash duration: 1000ms (slowest) to 150ms (fastest)
-            // Speed input is inverted in animate loop (61 - val).
-            // Let's use raw input value: higher val = faster = shorter duration.
             const speedVal = parseInt(speedInput.value); 
-            // Map 1 -> 1500ms, 60 -> 200ms
             const flashDuration = 1500 - ((speedVal / 60) * 1300);
             
             setTimeout(() => {
@@ -1270,8 +1312,6 @@
         if (ballSpeedSlider) {
             ballSpeedSlider.addEventListener('input', function() {
                 const newSpeed = parseInt(this.value);
-                // Keep current direction but update speed magnitude
-                // If 0,0 pick random angle
                 if (ballVX === 0 && ballVY === 0) {
                     const angle = Math.random() * Math.PI * 2;
                     ballVX = Math.cos(angle) * newSpeed;
@@ -1289,7 +1329,6 @@
                 ballSize = parseInt(this.value);
                 ballEl.style.width = ballSize + 'px';
                 ballEl.style.height = ballSize + 'px';
-                // Adjust font size dynamically for Key Ball
                 if (window.gameMode === 'keyball') {
                     ballEl.style.fontSize = (ballSize * 0.6) + 'px';
                 }
@@ -1297,7 +1336,6 @@
         }
 
         function scheduleNextRed() {
-            // Randomly turn red in 2 to 5 seconds
             const delay = Math.random() * 3000 + 2000;
             nextRedTime = Date.now() + delay;
         }
@@ -1311,30 +1349,25 @@
             ballY += ballVY;
             
             // Bounce Logic
-            // Right edge
             if (ballX >= width - ballSize) {
                 ballX = width - ballSize;
                 ballVX *= -1;
             } 
-            // Left edge
             else if (ballX <= 0) {
                 ballX = 0;
                 ballVX *= -1;
             }
             
-            // Bottom edge
             if (ballY >= height - ballSize) {
                 ballY = height - ballSize;
                 ballVY *= -1;
             } 
-            // Top edge
             else if (ballY <= 0) {
                 ballY = 0;
                 ballVY *= -1;
             }
 
             // UI Collision Logic
-            // Updated to EXCLUDE .panel elements
             const uiElements = [
                 document.getElementById('timer-display'),
                 ...document.querySelectorAll('.toolbar button')
@@ -1344,15 +1377,11 @@
                 if(!el) continue;
                 const rect = el.getBoundingClientRect();
                 
-                // AABB Check (using client coordinates since our ball is translated absolutely 0,0)
                 if (ballX < rect.right &&
                     ballX + ballSize > rect.left &&
                     ballY < rect.bottom &&
                     ballY + ballSize > rect.top) {
                     
-                    // Collision Detected
-                    
-                    // Determine which side we hit based on previous position
                     const wasLeft = prevX + ballSize <= rect.left;
                     const wasRight = prevX >= rect.right;
                     const wasAbove = prevY + ballSize <= rect.top;
@@ -1360,19 +1389,16 @@
                     
                     if (wasLeft || wasRight) {
                         ballVX *= -1;
-                        // Nudge out to prevent sticking
                         if (wasLeft) ballX = rect.left - ballSize - 1;
                         else ballX = rect.right + 1;
                     }
                     
                     if (wasAbove || wasBelow) {
                         ballVY *= -1;
-                        // Nudge out
                         if (wasAbove) ballY = rect.top - ballSize - 1;
                         else ballY = rect.bottom + 1;
                     }
                     
-                    // If complex overlap, default to reverse allows escape
                     if (!wasLeft && !wasRight && !wasAbove && !wasBelow) {
                         ballVX *= -1;
                         ballVY *= -1; 
@@ -1380,10 +1406,8 @@
                 }
             }
             
-            // Apply Position (Use transform for performance)
             ballEl.style.transform = `translate(${ballX}px, ${ballY}px)`;
             
-            // --- Color Logic Branching ---
             const now = Date.now();
             
             if (window.gameMode === 'ball') {
@@ -1401,14 +1425,11 @@
                     }
                 }
             } else if (window.gameMode === 'keyball') {
-                // KeyBall Logic: Wait for time, then show char
                 if (targetKeyBallChar === null && keyBallPool.length > 0) {
                     if (now >= nextKeyBallTime) {
-                         // Pick random char
                          const idx = Math.floor(Math.random() * keyBallPool.length);
                          targetKeyBallChar = keyBallPool.splice(idx, 1)[0];
                          
-                         // Display it
                          ballEl.innerText = targetKeyBallChar;
                          ballEl.style.fontSize = (ballSize * 0.6) + 'px';
                     }
@@ -1421,13 +1442,10 @@
             if (window.gameMode === 'ball' && ballState === 'red') {
                 ballClickCount++;
                 
-                // Play Sound (0-25)
                 const toneIndex = Math.min(ballClickCount - 1, 25);
                 playTone(toneIndex);
                 
                 if (ballClickCount >= 26) {
-                    // Win condition
-                    // Chime
                     for (let i = 0; i < 5; i++) {
                         setTimeout(() => playTone(25), i * 120);
                     }
@@ -1436,14 +1454,12 @@
                     }
                 }
                 
-                // Immediate feedback: turn white
                 ballState = 'white';
                 ballEl.classList.remove('red');
                 scheduleNextRed();
             }
         }
         
-        // Attach ball listener
         ballEl.addEventListener('mousedown', handleBallClick);
         ballEl.addEventListener('touchstart', handleBallClick);
 
@@ -1461,14 +1477,12 @@
             // --- Peripheral Input Handling ---
             if (window.gameMode === 'peripheral' && isRunning && targetPeripheralChar) {
                 if (e.key.toLowerCase() === targetPeripheralChar.toLowerCase()) {
-                    // Correct!
                     peripheralClickCount++;
                     const toneIndex = Math.min(peripheralClickCount - 1, 25);
                     playTone(toneIndex);
 
-                    targetPeripheralChar = null; // Clear logic
+                    targetPeripheralChar = null; 
                     
-                    // Win condition check
                      if (peripheralPool.length === 0) {
                         for (let i = 0; i < 5; i++) {
                             setTimeout(() => playTone(25), i * 120);
@@ -1482,27 +1496,21 @@
 
             // --- Key Ball Input Handling ---
             if (window.gameMode === 'keyball' && isRunning && targetKeyBallChar) {
-                // Check if key matches
                 if (e.key.toLowerCase() === targetKeyBallChar.toLowerCase()) {
-                    // Correct!
                     ballClickCount++;
                     
-                    // Sound
                     const toneIndex = Math.min(ballClickCount - 1, 25);
                     playTone(toneIndex);
                     
-                    // Clear state
                     targetKeyBallChar = null;
                     ballEl.innerText = '';
                     
-                    // Win Condition
                     if (keyBallPool.length === 0 && targetKeyBallChar === null) {
                          for (let i = 0; i < 5; i++) {
                              setTimeout(() => playTone(25), i * 120);
                         }
                         if (isRunning) toggleTimer();
                     } else {
-                        // Schedule next
                         scheduleNextKeyBallLetter();
                     }
                 }
@@ -1516,8 +1524,66 @@
             return `rgb(${r},${g},${b})`;
         }
 
+        // --- OKN RENDER FUNCTION ---
+        function renderOKN() {
+             // 1. Update Scroll
+            oknScrollOffset += window.oknSpeed * oknDirection;
+
+            // 2. Setup Dimensions
+            const sw = parseInt(window.oknStripeWidth);
+            const doubleW = sw * 2;
+            
+            // Ensure positive modulo for smooth wrapping (handle negative scrolling)
+            const modOffset = ((oknScrollOffset % doubleW) + doubleW) % doubleW;
+
+            // Start drawing from just outside the left edge to cover the screen plus overflow
+            const numStripes = Math.ceil(width / sw) + 2;
+
+            for (let i = -2; i < numStripes; i++) {
+                let x = (i * sw) - modOffset;
+                
+                if (oknPattern === 'checkerboard') {
+                    const numRows = Math.ceil(height / sw);
+                    for (let r = 0; r < numRows; r++) {
+                        // Alternate based on row + column index
+                        ctx.fillStyle = ((i + r) % 2 === 0) ? '#FFFFFF' : '#000000';
+                        ctx.fillRect(x, r * sw, sw, sw);
+                    }
+                } else {
+                    // Standard Vertical Stripes
+                    ctx.fillStyle = (i % 2 === 0) ? '#FFFFFF' : '#000000';
+                    ctx.fillRect(x, 0, sw, height);
+                }
+            }
+
+            // 3. Render Target (if enabled)
+            if (window.oknTargetMode) {
+                oknTargetX += oknTargetSpeed * oknDirection;
+                // Wrap target around screen
+                if (oknTargetX > width + 100) oknTargetX = -100;
+                if (oknTargetX < -100) oknTargetX = width + 100;
+
+                ctx.fillStyle = '#FF3333';
+                // Draw Target (Rectangle with rounded feel via fillRect)
+                const tx = oknTargetX;
+                const ty = (height / 2) - 40;
+                ctx.fillRect(tx, ty, 40, 80);
+                
+                // Add white outline for contrast against black stripes
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(tx, ty, 40, 80);
+            }
+        }
+
         function animate() {
             requestAnimationFrame(animate);
+
+            // --- OKN Rendering Branch ---
+            if (window.gameMode === 'okn') {
+                renderOKN();
+                return; // Skip normal chaos rendering logic
+            }
 
             // --- Peripheral Spawning Update ---
             if (window.gameMode === 'peripheral' && isRunning && targetPeripheralChar === null && peripheralPool.length > 0) {
@@ -1530,17 +1596,14 @@
             // --- Letter Wandering Update ---
             if (window.gameMode === 'alphabet' && wanderingLetters) {
                 const letters = document.querySelectorAll('.scattered-letter');
-                // UI Elements to collide with (Timer & Toolbar buttons)
                 const uiElements = [
                     document.getElementById('timer-display'),
                     ...document.querySelectorAll('.toolbar button')
                 ];
                 
                 letters.forEach(el => {
-                    // Skip if currently respawning (hidden)
                     if (el.style.opacity === '0') return;
 
-                    // Lazy Init logic for existing letters
                     if (typeof el.x === 'undefined') {
                         el.x = parseFloat(el.style.left || 0);
                         el.y = parseFloat(el.style.top || 0);
@@ -1557,23 +1620,20 @@
                     const w = el.offsetWidth;
                     const h = el.offsetHeight;
 
-                    // Screen Edge Bounce
                     if (el.x <= 0) { el.x = 0; el.vx *= -1; }
                     if (el.x >= width - w) { el.x = width - w; el.vx *= -1; }
                     if (el.y <= 0) { el.y = 0; el.vy *= -1; }
                     if (el.y >= height - h) { el.y = height - h; el.vy *= -1; }
 
-                    // UI Collision Logic (Simplified AABB)
                     for (const uiEl of uiElements) {
                         if (!uiEl) continue;
-                        const rect = uiEl.getBoundingClientRect(); // Optimization: could cache these outside loop
+                        const rect = uiEl.getBoundingClientRect(); 
                         
                         if (el.x < rect.right &&
                             el.x + w > rect.left &&
                             el.y < rect.bottom &&
                             el.y + h > rect.top) {
                             
-                            // Determine bounce direction
                             const wasLeft = prevX + w <= rect.left;
                             const wasRight = prevX >= rect.right;
                             const wasAbove = prevY + h <= rect.top;
