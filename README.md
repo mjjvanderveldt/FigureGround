@@ -1,141 +1,128 @@
+# Vision Training Games
 
-# Figure Ground Perception Trainer
+A browser-based visual training tool designed to improve various aspects of visual processing, including figure-ground discrimination, smooth pursuits, peripheral awareness, and gaze stability. These exercises are commonly used in vision therapy programs and may aid recovery from conditions like post-concussion syndrome.
 
-A browser-based visual training tool designed to improve figure-ground discrimination skills, sustained attention, and visual sequencing. It is often used to aid recovery from post-concussion syndrome or to train visual processing speed.
+The application generates procedural visual "noise" using the HTML5 Canvas API, creating challenging environments where users must isolate and respond to specific targets.
 
-It generates a chaotic, procedurally generated background using the HTML5 Canvas API to "camouflage" targets (text or objects). The user must visually isolate the targets from the moving noise.
+## Game Modes
 
-## 🚀 Features
+### 1. Scattered Alphabet (Figure-Ground Perception)
 
-### Core Mechanics
+Letters or numbers are scattered across the screen, camouflaged against a chaotic background of random shapes, lines, or static. The user must find and click each character in sequential order (A→Z or 1→26).
 
--   **Procedural Chaos:** Three distinct noise modes (Geometric Shapes, Digital Rain, Chaotic Lines).
-    
--   **Collision-Free Scattering:** Algorithms ensure targets are randomly placed but **never overlap** with each other.
-    
--   **Smart Layout:** "Safe zones" prevent targets from being hidden behind UI controls or the timer.
-    
--   **Responsive Design:** Adapts to window resizing dynamically.
-    
+**Vision Therapy Benefits:**
+- **Figure-Ground Perception:** Trains the brain to filter out irrelevant visual noise and focus on specific targets.
+- **Saccades:** Requires rapid, accurate eye movements to scan the screen efficiently.
+- **Sequential Processing:** Builds the cognitive skill of ordering visual information.
 
-### Game Modes
+**Options:**
+- Toggle between letters (a-z) and numbers (1-26)
+- Enable "Wandering Letters" to make targets drift and bounce around the screen
+- Randomize target colors for increased difficulty
 
-1.  **Sequential Search (Alphabet & Numbers):** - Find targets in order (e.g., A → B → C or 1 → 2 → 3).
-    
-    -   Includes a visual **Target Display** ("FIND: a") to guide the user.
-        
-    -   **Audio Feedback:** Plays a musical tone for every correct click, building a scale as you progress, with a victory chime at the end.
-        
-    -   **Toggleable Sets:** Switch between the Alphabet (a-z) and Numbers (1-26).
-        
-2.  **Bouncing Ball (Sustained Attention):**
-    
-    -   Track a single moving ball amidst the chaos.
-        
-    -   Click the ball **only** when it turns **RED**.
-        
-    -   Tests impulse control and tracking ability.
-        
+### 2. Bouncing Ball (Pursuits & Attention)
 
-### Difficulty Modifiers
+A white ball moves continuously across the screen, bouncing off edges and UI elements. The user must visually track the ball but only click when it flashes red.
 
--   **Wandering Targets:** An optional setting where letters/numbers float around the screen and bounce off edges, requiring tracking rather than just scanning.
-    
--   **Randomize Colors:** Randomizes the color of the text targets to increase visual noise and difficulty.
-    
--   **Adjustable Chaos:** Sliders to control the speed and density of the background distractions.
-    
+**Vision Therapy Benefits:**
+- **Smooth Pursuits:** Trains the eyes to follow a moving target without jerky movements.
+- **Visual Discrimination:** Requires identifying a change in color while the object is in motion.
+- **Impulse Control (Go/No-Go):** Trains the user to inhibit responses until a specific visual condition is met.
+
+**Options:**
+- Adjustable ball speed
+- Adjustable ball size
+
+### 3. Key Ball (Dynamic Visual Acuity)
+
+A ball containing a letter moves across the screen. The user must type the corresponding letter on their keyboard before it changes.
+
+**Vision Therapy Benefits:**
+- **Dynamic Visual Acuity:** Trains the ability to resolve fine detail while an object is in motion.
+- **Visual-Motor Integration:** Connects visual processing directly to motor output (typing) under time pressure.
+- **Accommodation:** Helps maintain focus on a moving target.
+
+**Options:**
+- Adjustable ball speed
+- Adjustable ball size
+
+### 4. Peripheral Awareness (Visual Field Training)
+
+A fixation cross appears at the center of the screen. Letters flash briefly in the peripheral areas (left or right sides), and the user must identify them by typing the corresponding key without moving their eyes from the center cross.
+
+**Vision Therapy Benefits:**
+- **Peripheral Expansion:** Encourages widening the "attentional spotlight" beyond central vision.
+- **Central-Peripheral Integration:** Trains the brain to process peripheral information while maintaining central fixation.
+- **Visual Reaction Speed:** Ephemeral targets require rapid processing of peripheral stimuli.
+
+### 5. OKN (Optokinetic Stimulation)
+
+High-contrast vertical stripes or a checkerboard pattern scrolls continuously across the screen. Users can track a red target box or identify letters that appear within it.
+
+**Vision Therapy Benefits:**
+- **Optokinetic Reflex:** Stimulates involuntary eye movements triggered by large moving fields, often used to treat motion sensitivity or balance issues.
+- **Anti-Suppression:** The high-contrast moving background provides strong binocular stimulation.
+- **Gaze Stability:** Tracking the red target against the moving background trains fixation stability despite visual distractions.
+
+**Options:**
+- Adjustable scroll speed
+- Adjustable stripe width
+- Scroll direction (left-to-right or right-to-left)
+- Toggle checkerboard pattern
+- Target tracking mode (follow the red box)
+- Letter stream mode (type letters as they appear in the target)
+
+## Shared Features
 
 ### Progress Tracking
+- **Stopwatch:** Integrated timer measures completion time for each session.
+- **Personal History:** Completion times are saved to Firebase Firestore and persist across sessions.
+- **Local Caching:** Recent times are cached locally for immediate feedback.
 
--   **Stopwatch:** Integrated timer to track performance.
-    
--   **Leaderboard:** Automatically saves completion times to Firebase Firestore, allowing history to persist across sessions (per user).
-    
--   **Local History:** Caches recent times locally for immediate feedback.
-    
+### Background Customization
+- **Chaos Speed:** Controls how frequently the background distractors update.
+- **Pattern Density:** Controls how many background objects appear.
+- **Pattern Types:** Three distinct noise styles (geometric shapes, vertical lines, chaotic strokes).
 
-## 🎮 How to Use
+### Audio Feedback
+Each correct response plays a musical tone that ascends chromatically as you progress. Completing all 26 targets triggers a victory chime.
 
-### Mode 1: Alphabet / Numbers
-
-1.  **Select Sequence:** Use the settings to choose between "Alphabet" or "Use Numbers (1-26)".
-    
-2.  **Start:** Click `▶ Start`. The background noise will begin.
-    
-3.  **The Task:** Look at the **FIND:** display at the bottom center. Scan the screen for that specific character.
-    
-4.  **Interact:** Click the correct character. You will hear a tone, and the target will change to the next in the sequence.
-    
-5.  **Complete:** Once you reach the end (z or 26), the timer stops automatically, and your time is logged.
-    
-
-### Mode 2: Bouncing Ball
-
-1.  **Select Mode:** Open Settings and click "Ball".
-    
-2.  **Start:** Click `▶ Start`. A white ball will begin bouncing around the screen.
-    
-3.  **The Task:** Follow the ball with your eyes. Ignore the background noise.
-    
-4.  **Interact:** Wait for the ball to flash **RED**. Click it quickly before it turns white again.
-    
-5.  **Win:** Successfully catch the red ball 26 times to complete the session.
-    
-
-## ⚙️ Settings & Controls
-
-Click `⚙️ Settings` to open the control panel:
-
--   **Game Mode:** Switch between _Alphabet_ and _Ball_.
-    
--   **Chaos Speed:** Controls how fast the background distractors move.
-    
--   **Pattern Density:** Controls how many background objects appear.
-    
--   **Wandering Letters:** (Checkbox) Makes the text targets move around the screen.
-    
--   **Randomize Colors:** (Checkbox) Changes text targets from white to random bright colors.
-    
--   **Use Numbers:** (Checkbox) Switches the target set from a-z to 1-26.
-    
--   **Randomize Positions:** Instantly reshuffles the targets (Spacebar shortcut).
-    
--   **Change Pattern:** Cycles through the 3 background visual styles.
-    
-
-## 🛠️ Technical Setup
+## Setup Instructions
 
 ### Running the Application
 
-This is a **Single-File Application** containing HTML, CSS, and JavaScript.
+This is a single-file application containing all HTML, CSS, and JavaScript.
 
-1.  **Browser:** Open `index.html` in any modern web browser (Chrome, Edge, Firefox, Safari).
-    
-2.  **Internet:** An internet connection is required to load the Firebase SDK and save/load history data.
-    
+1. Open `index.html` in any modern web browser (Chrome, Edge, Firefox, Safari).
+2. An internet connection is required to load the Firebase SDK for saving and loading history data.
 
-### Architecture Details
+### Technical Details
 
--   **Frontend:** Vanilla JavaScript (ES6 Modules).
-    
--   **Rendering:** HTML5 Canvas (2D Context) for noise; DOM elements for interaction.
-    
--   **Audio:** Web Audio API for generating synthesized tones (no external assets required).
-    
--   **Data:** Firebase Firestore.
-    
-    -   **Collection Path:** `artifacts/{appId}/users/{uid}/leaderboard`
-        
--   **Auth:** Firebase Anonymous Auth.
-    
+- **Frontend:** Vanilla JavaScript (ES6 Modules)
+- **Rendering:** HTML5 Canvas (2D Context) for background noise; DOM elements for interactive targets
+- **Audio:** Web Audio API for synthesized tones (no external assets required)
+- **Data Storage:** Firebase Firestore
+  - Collection path: `artifacts/{appId}/users/{uid}/leaderboard`
+- **Authentication:** Firebase Anonymous Auth
 
-## ⚠️ Disclaimer
+## Controls
 
-**I am not a doctor or medical professional.** This software is provided for educational and entertainment purposes only. It is not intended to diagnose, treat, cure, or prevent any disease or medical condition, including post-concussion syndrome. Always seek the advice of your physician or other qualified health provider with any questions you may have regarding a medical condition or visual therapy regimen.
+| Action | Control |
+|--------|---------|
+| Open Settings | Click ⚙️ Settings button |
+| View History | Click 🏆 History button |
+| Start/Stop Timer | Click ▶ Start / ⏹ Stop button |
+| Randomize Positions | Press Spacebar (Alphabet mode) |
+| Identify Target | Click target (Alphabet/Ball) or type letter (Key Ball/Peripheral/OKN) |
 
-**Seizure Warning:** This application contains flashing lights and high-contrast moving patterns.
+## Legal Disclaimer
 
-## 📄 License
+**This software is not a medical device.** It is provided for educational, recreational, and general wellness purposes only. It is not intended to diagnose, treat, cure, or prevent any disease or medical condition, including (but not limited to) post-concussion syndrome, amblyopia, or other visual disorders.
+
+Always consult with a qualified healthcare provider, optometrist, or vision therapist before beginning any vision training program. Do not use this application as a substitute for professional medical advice, diagnosis, or treatment.
+
+**Seizure Warning:** This application contains flashing lights, high-contrast patterns, and rapidly changing images. If you have a history of photosensitive epilepsy or are sensitive to flashing or strobing lights, do not use this application.
+
+## License
 
 This project is open source and free to use for personal or educational purposes.
