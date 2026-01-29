@@ -176,6 +176,7 @@
         function getPatternName() {
             if (window.gameMode === 'ball') return 'Bouncing Ball';
             if (window.gameMode === 'keyball') return 'Key Ball';
+            if (window.gameMode === 'peripheral') return 'Peripheral';
             
             const names = ['Shapes', 'Lines', 'Strokes'];
             const type = window.patternType || 0;
@@ -310,6 +311,22 @@
             cursor: pointer;
             touch-action: manipulation;
         }
+        
+        /* Fixation Cross for Peripheral Mode */
+        #fixation-cross {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 60px;
+            font-weight: bold;
+            color: cyan;
+            z-index: 50; /* Above noise, below panels */
+            pointer-events: none;
+            user-select: none;
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+        }
+        #fixation-cross.hidden { display: none; }
         
         /* Bouncing Ball Styles */
         #bouncing-ball {
@@ -542,6 +559,7 @@
     <canvas id="noiseCanvas"></canvas>
     
     <!-- Game Containers -->
+    <div id="fixation-cross" class="hidden">+</div>
     <div id="scatter-container"></div>
     <div id="bouncing-ball" class="hidden"></div>
 
@@ -554,6 +572,9 @@
             <div id="target-display" style="color: #fff; font-size: 1.2rem; font-weight: bold; text-shadow: 0 2px 2px rgba(0,0,0,0.8); display: block; font-family: sans-serif;">
                 FIND: <span id="target-char" style="font-size: 2rem; color: #f0ad4e; margin-left: 8px;">a</span>
             </div>
+            <div id="peripheral-hint" style="color: #ccc; font-size: 1rem; font-family: sans-serif; display: none;">
+                 Focus on center +
+            </div>
         </div> 
         <button id="timer-btn" onclick="toggleTimer()">▶ Start</button>
         <button id="lb-toggle-btn" onclick="togglePanel('leaderboard')">🏆 History</button>
@@ -562,10 +583,11 @@
     <div id="controls" class="panel hidden">
         <div class="control-group">
             <label>Game Mode</label>
-            <div class="btn-group" style="flex-direction: row;">
-                <button id="mode-alpha-btn" class="action-btn active-mode" style="flex:1;" onclick="setGameMode('alphabet')">Alphabet</button>
-                <button id="mode-ball-btn" class="action-btn" style="flex:1;" onclick="setGameMode('ball')">Ball</button>
-                <button id="mode-keyball-btn" class="action-btn" style="flex:1;" onclick="setGameMode('keyball')">Key Ball</button>
+            <div class="btn-group" style="flex-direction: row; flex-wrap: wrap;">
+                <button id="mode-alpha-btn" class="action-btn active-mode" style="flex:1; min-width: 70px;" onclick="setGameMode('alphabet')">Alphabet</button>
+                <button id="mode-ball-btn" class="action-btn" style="flex:1; min-width: 70px;" onclick="setGameMode('ball')">Ball</button>
+                <button id="mode-keyball-btn" class="action-btn" style="flex:1; min-width: 70px;" onclick="setGameMode('keyball')">Key Ball</button>
+                <button id="mode-peripheral-btn" class="action-btn" style="flex:1; min-width: 70px;" onclick="setGameMode('peripheral')">Peripheral</button>
             </div>
         </div>
 
@@ -664,7 +686,7 @@
         }
 
         // --- Game Logic Globals ---
-        window.gameMode = 'alphabet'; // 'alphabet', 'ball', 'keyball'
+        window.gameMode = 'alphabet'; // 'alphabet', 'ball', 'keyball', 'peripheral'
         window.patternType = 0; // 0, 1, 2
         let nextCharIndex = 0; // 0 = 'a', 25 = 'z'
         let wanderingLetters = false; 
@@ -712,6 +734,12 @@
         let targetKeyBallChar = null;
         let nextKeyBallTime = 0;
 
+        // Peripheral Globals
+        let peripheralPool = [];
+        let targetPeripheralChar = null;
+        let nextPeripheralTime = 0;
+        let peripheralClickCount = 0;
+
         // --- Timer Logic ---
         let startTime;
         let timerInterval;
@@ -742,6 +770,11 @@
                 timerBtn.innerText = "▶ Start";
                 timerBtn.classList.remove('running');
                 
+                // Cleanup specific modes
+                if (window.gameMode === 'peripheral') {
+                    clearPeripheral();
+                }
+                
                 if (window.saveTime && elapsed > 100) { 
                     window.saveTime(elapsed);
                     // Wait briefly to ensure data is committed before showing the panel
@@ -771,6 +804,8 @@
                     scheduleNextRed();
                 } else if (window.gameMode === 'keyball') {
                     initKeyBall();
+                } else if (window.gameMode === 'peripheral') {
+                    initPeripheral();
                 }
             }
         }
@@ -796,11 +831,19 @@
             document.getElementById('mode-alpha-btn').classList.toggle('active-mode', mode === 'alphabet');
             document.getElementById('mode-ball-btn').classList.toggle('active-mode', mode === 'ball');
             document.getElementById('mode-keyball-btn').classList.toggle('active-mode', mode === 'keyball');
+            document.getElementById('mode-peripheral-btn').classList.toggle('active-mode', mode === 'peripheral');
             
             // Toggle Controls
             document.getElementById('alpha-controls').classList.toggle('hidden', mode !== 'alphabet');
             // Show ball controls for both ball modes
-            document.getElementById('ball-controls').classList.toggle('hidden', mode === 'alphabet');
+            document.getElementById('ball-controls').classList.toggle('hidden', mode === 'alphabet' || mode === 'peripheral');
+
+            // Toggle Target Display
+            const targetDisp = document.getElementById('target-display');
+            const peripheralHint = document.getElementById('peripheral-hint');
+            
+            if (targetDisp) targetDisp.style.display = (mode === 'alphabet') ? 'block' : 'none';
+            if (peripheralHint) peripheralHint.style.display = (mode === 'peripheral') ? 'block' : 'none';
 
             // Update Hint Text
             const hint = document.getElementById('ball-hint-text');
@@ -809,29 +852,29 @@
                 if (mode === 'keyball') hint.innerText = "Type the letter shown in the ball!";
             }
 
-            // Toggle Target Display (NEW)
-            const targetDisp = document.getElementById('target-display');
-            if(targetDisp) targetDisp.style.display = (mode === 'alphabet') ? 'block' : 'none';
-
             // Toggle Elements
             const scatter = document.getElementById('scatter-container');
             const ball = document.getElementById('bouncing-ball');
+            const cross = document.getElementById('fixation-cross');
             
+            // Reset visibility defaults
+            cross.classList.add('hidden');
+            ball.classList.add('hidden');
+            scatter.classList.add('hidden');
+            scatter.innerHTML = ''; // Clear scatter
+
             if (mode === 'alphabet') {
                 scatter.classList.remove('hidden');
-                ball.classList.add('hidden');
                 scatterLetters();
+            } else if (mode === 'peripheral') {
+                scatter.classList.remove('hidden'); // We reuse scatter container for ephemeral letters
+                cross.classList.remove('hidden');
             } else {
                 // Both ball modes
-                scatter.classList.add('hidden');
                 ball.classList.remove('hidden');
                 if (mode === 'ball') initBall();
                 if (mode === 'keyball') {
-                     // Keyball init is handled in start or here if desired, 
-                     // but initBall resets physics which is good.
                      initBall();
-                     // Keyball specific init requires start to be pressed to really go,
-                     // but we can clear display
                      ballEl.innerText = '';
                      ballEl.classList.remove('red');
                 }
@@ -892,7 +935,6 @@
             }
 
             // 2. Clamp Letter Positions immediately if screen shrunk
-            // This prevents letters from being stuck off-screen after zooming in or resizing
             if (window.gameMode === 'alphabet') {
                 const letters = document.querySelectorAll('.scattered-letter');
                 letters.forEach(el => {
@@ -1131,6 +1173,91 @@
             scheduleNextKeyBallLetter();
         }
 
+        // --- Peripheral Awareness Logic ---
+        function initPeripheral() {
+            peripheralClickCount = 0;
+            scatterContainer.innerHTML = '';
+            const currentSet = useNumbers ? numbersList : alphabetLower.split('');
+            peripheralPool = [...currentSet]; 
+            targetPeripheralChar = null;
+            scheduleNextPeripheralTarget();
+        }
+
+        function clearPeripheral() {
+            targetPeripheralChar = null;
+            scatterContainer.innerHTML = ''; // Clear any ephemeral
+        }
+
+        function scheduleNextPeripheralTarget() {
+             if (!isRunning || window.gameMode !== 'peripheral') return;
+             // Delay between inputs
+             const delay = Math.random() * 2000 + 1000; 
+             nextPeripheralTime = Date.now() + delay;
+        }
+
+        function spawnPeripheralTarget() {
+            if (peripheralPool.length === 0) return;
+
+            // Pick char
+            const idx = Math.floor(Math.random() * peripheralPool.length);
+            const char = peripheralPool[idx];
+            // Remove it from pool? Wait until they type it to remove.
+            // For now, let's keep it in pool until they type it, but we need to know what to display.
+            // Actually, we pick one, show it, wait for input.
+            // If we remove now, and they miss it? 
+            // Better logic: Pick one to be the 'active' target.
+            
+            // Note: If targetPeripheralChar is NOT null, it means the user hasn't typed the previous one yet?
+            // Or does it disappear?
+            // "Briefly flash... user must identify".
+            // So we remove from pool, set as active target, flash it.
+            
+            targetPeripheralChar = peripheralPool.splice(idx, 1)[0];
+            
+            const el = document.createElement('div');
+            el.classList.add('scattered-letter');
+            el.innerText = targetPeripheralChar;
+            el.style.color = randomColors ? getRandomBrightColor() : '#FFFFFF';
+            el.style.fontSize = '80px'; // Big for peripheral visibility
+            
+            // Position Logic: < 10% or > 90%
+            const isLeft = Math.random() < 0.5;
+            const zoneWidth = width * 0.15; // 15% zone
+            
+            let posX;
+            if (isLeft) {
+                posX = Math.random() * (zoneWidth - 80); // Ensure it fits
+                if (posX < 10) posX = 10;
+            } else {
+                posX = width - zoneWidth + (Math.random() * (zoneWidth - 80));
+                if (posX > width - 90) posX = width - 90;
+            }
+            
+            // Y position (avoid top/bottom bars)
+            const safeY = height - uiTopMargin - uiBottomMargin;
+            const posY = uiTopMargin + (Math.random() * (safeY - 80));
+            
+            el.style.left = `${posX}px`;
+            el.style.top = `${posY}px`;
+            
+            scatterContainer.appendChild(el);
+            
+            // Flash Duration logic
+            // Use Chaos Speed slider to control flash duration?
+            // Low slider (high speed value) = Fast flash
+            // Slider 1-60. 
+            // Flash duration: 1000ms (slowest) to 150ms (fastest)
+            // Speed input is inverted in animate loop (61 - val).
+            // Let's use raw input value: higher val = faster = shorter duration.
+            const speedVal = parseInt(speedInput.value); 
+            // Map 1 -> 1500ms, 60 -> 200ms
+            const flashDuration = 1500 - ((speedVal / 60) * 1300);
+            
+            setTimeout(() => {
+                if (el.parentNode) el.parentNode.removeChild(el);
+            }, flashDuration);
+        }
+
         function scheduleNextKeyBallLetter() {
             const delay = Math.random() * 2000 + 1000; // 1-3 seconds delay
             nextKeyBallTime = Date.now() + delay;
@@ -1331,11 +1458,31 @@
                 }
             }
             
-            // Key Ball Input Handling
+            // --- Peripheral Input Handling ---
+            if (window.gameMode === 'peripheral' && isRunning && targetPeripheralChar) {
+                if (e.key.toLowerCase() === targetPeripheralChar.toLowerCase()) {
+                    // Correct!
+                    peripheralClickCount++;
+                    const toneIndex = Math.min(peripheralClickCount - 1, 25);
+                    playTone(toneIndex);
+
+                    targetPeripheralChar = null; // Clear logic
+                    
+                    // Win condition check
+                     if (peripheralPool.length === 0) {
+                        for (let i = 0; i < 5; i++) {
+                            setTimeout(() => playTone(25), i * 120);
+                        }
+                        if (isRunning) toggleTimer();
+                    } else {
+                        scheduleNextPeripheralTarget();
+                    }
+                }
+            }
+
+            // --- Key Ball Input Handling ---
             if (window.gameMode === 'keyball' && isRunning && targetKeyBallChar) {
                 // Check if key matches
-                // For letters, e.key is likely lowercase 'a'.
-                // For numbers, e.key is '1'.
                 if (e.key.toLowerCase() === targetKeyBallChar.toLowerCase()) {
                     // Correct!
                     ballClickCount++;
@@ -1349,12 +1496,9 @@
                     ballEl.innerText = '';
                     
                     // Win Condition
-                    const totalNeeded = useNumbers ? numbersList.length : alphabetLower.length;
-                    
-                    // Note: pool length decreases, so empty pool + no current char = done
                     if (keyBallPool.length === 0 && targetKeyBallChar === null) {
                          for (let i = 0; i < 5; i++) {
-                            setTimeout(() => playTone(25), i * 120);
+                             setTimeout(() => playTone(25), i * 120);
                         }
                         if (isRunning) toggleTimer();
                     } else {
@@ -1375,7 +1519,15 @@
         function animate() {
             requestAnimationFrame(animate);
 
-            // --- Letter Wandering Update (NEW) ---
+            // --- Peripheral Spawning Update ---
+            if (window.gameMode === 'peripheral' && isRunning && targetPeripheralChar === null && peripheralPool.length > 0) {
+                const now = Date.now();
+                if (now >= nextPeripheralTime) {
+                    spawnPeripheralTarget();
+                }
+            }
+
+            // --- Letter Wandering Update ---
             if (window.gameMode === 'alphabet' && wanderingLetters) {
                 const letters = document.querySelectorAll('.scattered-letter');
                 // UI Elements to collide with (Timer & Toolbar buttons)
