@@ -911,6 +911,7 @@
         let nextPeripheralTime = 0;
         let peripheralClickCount = 0;
         let peripheralTimeout = null;
+        let currentPeripheralEl = null;
 
         // --- Timer Logic ---
         let startTime;
@@ -1361,6 +1362,8 @@
             targetPeripheralChar = null;
             scatterContainer.innerHTML = ''; 
             clearTimeout(peripheralTimeout);
+            if(currentPeripheralEl) currentPeripheralEl.remove();
+            currentPeripheralEl = null;
         }
 
         function scheduleNextPeripheralTarget() {
@@ -1385,7 +1388,7 @@
             el.style.fontSize = '80px'; 
             
             const isLeft = Math.random() < 0.5;
-            const zoneWidth = width * 0.15; // 15% zone
+            const zoneWidth = width * 0.35; // 35% zone (closer to center)
             
             let posX;
             if (isLeft) {
@@ -1403,6 +1406,7 @@
             el.style.top = `${posY}px`;
             
             scatterContainer.appendChild(el);
+            currentPeripheralEl = el;
             
             const speedVal = parseInt(speedInput.value); 
             const flashDuration = (1500 - ((speedVal / 60) * 1300)) + 1000;
@@ -1605,6 +1609,12 @@
 
                     targetPeripheralChar = null; 
                     clearTimeout(peripheralTimeout); // Clear miss timeout on success
+                    
+                    // Immediate removal of element
+                    if (currentPeripheralEl) {
+                        currentPeripheralEl.remove();
+                        currentPeripheralEl = null;
+                    }
                     
                      if (peripheralPool.length === 0) {
                         for (let i = 0; i < 5; i++) {
